@@ -1,341 +1,644 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
+import { WalletMenu } from "@/components/WalletMenu";
+import { useCreateTournament } from "@/hooks/useCreateTournament";
+import { toFinnhubSymbol, useMarketSymbols } from "@/hooks/useMarketData";
+import { useOnChainTournaments } from "@/hooks/useOnChainTournaments";
+import { useStartRound } from "@/hooks/useStartRound";
+import { EXPLORER_BASE, isCreateTournamentAdmin } from "@/lib/constants";
 
-const CHART_BARS = [
-  { up: true,  h: "40%" },
-  { up: false, h: "35%" },
-  { up: true,  h: "50%" },
-  { up: true,  h: "65%" },
-  { up: false, h: "55%" },
-  { up: true,  h: "70%" },
-  { up: true,  h: "85%" },
-];
+type FormState = {
+  roundId: string;
+  seasonId: string;
+  coinSymbol: string;
+  entryFeeRaw: string;
+  startTime: string;
+  endTime: string;
+  earlyWindowMinutes: string;
+};
 
-const TIMEFRAMES = ["1M", "5M", "15M", "1H"];
+function toInputDate(date: Date): string {
+  const offset = date.getTimezoneOffset();
+  const local = new Date(date.getTime() - offset * 60 * 1000);
+  return local.toISOString().slice(0, 16);
+}
 
-export default function ArenaPage() {
+function initialFormState(): FormState {
+  const now = new Date();
+  const start = new Date(now.getTime() + 10 * 60 * 1000);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+
+  return {
+    roundId: "1",
+    seasonId: "1",
+    coinSymbol: "BTC",
+    entryFeeRaw: "100000000",
+    startTime: toInputDate(start),
+    endTime: toInputDate(end),
+    earlyWindowMinutes: "5",
+  };
+}
+
+function parseDateInput(value: string): number {
+  return new Date(value).getTime();
+}
+
+function formatDateTime(timestampMs: number): string {
+  if (!timestampMs) return "-";
+  return new Date(timestampMs).toLocaleString();
+}
+
+export default function CreateTournamentPage() {
   const account = useCurrentAccount();
-  const [direction, setDirection] = useState<"up" | "down">("up");
-  const [timeframe, setTimeframe] = useState("1M");
-  const [stake, setStake] = useState("");
+  const isAdmin = isCreateTournamentAdmin(account?.address);
+  const [form, setForm] = useState<FormState>(() => initialFormState());
+  const [txDigest, setTxDigest] = useState<string | null>(null);
+  const [startTxDigest, setStartTxDigest] = useState<string | null>(null);
+  const [startMessage, setStartMessage] = useState<string | null>(null);
+  const { createTournament, isPending, isSuccess, isError, error } =
+    useCreateTournament();
+  const {
+    startRound,
+    isPending: isStartPending,
+    isError: isStartError,
+    error: startError,
+    reset: resetStartRound,
+  } = useStartRound();
 
-  const balance = 1240.50;
-  const payout = stake && parseFloat(stake) > 0
-    ? (parseFloat(stake) * (direction === "up" ? 1.84 : 2.12)).toFixed(2)
-    : "0.00";
+  const symbolsQuery = useMarketSymbols("BINANCE", "USDT");
+  const availableSymbols = useMemo(
+    () => symbolsQuery.data ?? [],
+    [symbolsQuery.data],
+  );
+  const tournamentsQuery = useOnChainTournaments();
+  const tournaments = tournamentsQuery.data ?? [];
+  const selectedCoinSymbol = useMemo(() => {
+    const current = form.coinSymbol.toUpperCase();
+    if (availableSymbols.includes(current)) return current;
+    return availableSymbols[0] ?? current;
+  }, [availableSymbols, form.coinSymbol]);
+
+  const validation = useMemo(() => {
+    const roundId = Number(form.roundId);
+    const seasonId = Number(form.seasonId);
+    const entryFeeRaw = Number(form.entryFeeRaw);
+    const earlyWindowMinutes = Number(form.earlyWindowMinutes);
+    const startTimeMs = parseDateInput(form.startTime);
+    const endTimeMs = parseDateInput(form.endTime);
+
+    if (!Number.isFinite(roundId) || roundId <= 0) {
+      return "Round ID must be greater than 0";
+    }
+    if (!Number.isFinite(seasonId) || seasonId <= 0) {
+      return "Season ID must be greater than 0";
+    }
+    if (!form.coinSymbol.trim()) return "Coin symbol is required";
+    if (!Number.isFinite(entryFeeRaw) || entryFeeRaw <= 0) {
+      return "Entry fee must be greater than 0";
+    }
+    if (!Number.isFinite(earlyWindowMinutes) || earlyWindowMinutes < 0) {
+      return "Early window must be 0 or greater";
+    }
+    if (!Number.isFinite(startTimeMs) || !Number.isFinite(endTimeMs)) {
+      return "Start and end time are required";
+    }
+    if (endTimeMs <= startTimeMs) return "End time must be after start time";
+
+    return null;
+  }, [form]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!account || !isAdmin || validation) return;
+
+    const result = await createTournament({
+      roundId: Number(form.roundId),
+      seasonId: Number(form.seasonId),
+      coinSymbol: selectedCoinSymbol,
+      startTimeMs: parseDateInput(form.startTime),
+      endTimeMs: parseDateInput(form.endTime),
+      entryFeeRaw: Number(form.entryFeeRaw),
+      earlyWindowMinutes: Number(form.earlyWindowMinutes),
+    });
+
+    setTxDigest(result.digest ?? null);
+  }
+
+  async function getLiveStartPriceRaw(symbol: string): Promise<number> {
+    const marketSymbol = toFinnhubSymbol(symbol);
+    const response = await fetch(
+      `/api/market/quote?symbol=${encodeURIComponent(marketSymbol)}`,
+      { cache: "no-store" },
+    );
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(
+        typeof payload?.error === "string"
+          ? payload.error
+          : "Failed to fetch live price.",
+      );
+    }
+
+    const currentPrice = Number(payload?.c);
+    if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+      throw new Error("Invalid live price from market feed.");
+    }
+
+    return Math.floor(currentPrice * 100_000_000);
+  }
+
+  async function handleStartTournament(roundObjectId: string, coinSymbol: string) {
+    if (!account || !isAdmin) return;
+
+    resetStartRound();
+    setStartMessage(null);
+    setStartTxDigest(null);
+
+    try {
+      const priceStartRaw = await getLiveStartPriceRaw(coinSymbol);
+      const result = await startRound({
+        roundId: roundObjectId,
+        priceStartRaw,
+      });
+      setStartTxDigest(result.digest ?? null);
+      setStartMessage(
+        `Round started for ${coinSymbol}/USDT with start price raw ${priceStartRaw}.`,
+      );
+      await tournamentsQuery.refetch();
+    } catch (executionError) {
+      setStartMessage(
+        executionError instanceof Error
+          ? executionError.message
+          : "Failed to start tournament round.",
+      );
+    }
+  }
 
   return (
-    <div style={{ backgroundColor: "#102219" }}
-      className="flex flex-col h-screen text-slate-100 overflow-hidden">
-
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-6 py-3 shrink-0 sticky top-0 z-50"
-        style={{ backgroundColor: "#102219", borderBottom: "1px solid rgba(13,242,128,0.1)" }}>
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded flex items-center justify-center"
-              style={{ backgroundColor: "#0df280" }}>
-              <span className="material-symbols-outlined font-bold text-lg leading-none"
-                style={{ color: "#102219", fontSize: "20px" }}>query_stats</span>
-            </div>
-            <h1 className="text-lg font-bold tracking-tight">GameFi Prediction Arena</h1>
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <span className="text-sm font-medium pb-1"
-              style={{ color: "#0df280", borderBottom: "2px solid #0df280" }}>Arena</span>
-            <Link href="/leaderboard" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Leaderboard</Link>
-            <Link href="/profile" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">History</Link>
-            <a href="#" className="text-sm font-medium text-slate-400 hover:text-white transition-colors">Docs</a>
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg"
-            style={{ backgroundColor: "rgba(13,242,128,0.1)", border: "1px solid rgba(13,242,128,0.2)" }}>
-            <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "#0df280" }} />
-            <span className="text-xs font-bold uppercase tracking-wider" style={{ color: "#0df280" }}>OneChain Mainnet</span>
-          </div>
-          {account ? (
-            <div className="flex items-center gap-2 p-1 rounded-lg"
-              style={{ backgroundColor: "rgba(30,41,59,0.5)", border: "1px solid #334155" }}>
-              <span className="px-3 text-sm font-bold text-slate-100">1,240.50 USDC</span>
-              <div className="px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 transition-all"
-                style={{ backgroundColor: "#0df280", color: "#102219" }}>
-                <span className="material-symbols-outlined leading-none" style={{ fontSize: "16px" }}>account_balance_wallet</span>
-                {account.address.slice(0, 4)}...{account.address.slice(-4)}
-              </div>
-            </div>
-          ) : (
-            <ConnectButton />
-          )}
-        </div>
-      </header>
-
-      {/* ── Main 2-pane ─────────────────────────────────────────── */}
-      <main className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-
-        {/* Left: Chart pane */}
-        <div className="flex-1 flex flex-col relative"
-          style={{ borderRight: "1px solid #1e293b", backgroundColor: "rgba(16,34,25,0.5)" }}>
-
-          {/* Market header */}
-          <div className="p-4 flex items-center justify-between shrink-0"
-            style={{ borderBottom: "1px solid #1e293b" }}>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-white leading-none" style={{ fontSize: "18px" }}>currency_bitcoin</span>
-                </div>
-                <div>
-                  <div className="text-sm font-bold">BTC / USDC</div>
-                  <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Bitcoin Price Arena</div>
-                </div>
-              </div>
-              <div className="h-8 w-px mx-2" style={{ backgroundColor: "#1e293b" }} />
-              <div>
-                <div className="text-lg font-bold" style={{ color: "#0df280" }}>$64,231.42</div>
-                <div className="text-xs flex items-center gap-1" style={{ color: "#0df280" }}>
-                  <span className="material-symbols-outlined leading-none" style={{ fontSize: "12px" }}>trending_up</span>
-                  +2.41%
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex rounded-lg p-1" style={{ backgroundColor: "#0f172a", border: "1px solid #1e293b" }}>
-                {TIMEFRAMES.map((tf) => (
-                  <button key={tf} onClick={() => setTimeframe(tf)}
-                    className="px-3 py-1 text-xs font-bold rounded transition-colors"
-                    style={timeframe === tf
-                      ? { backgroundColor: "#1e293b", color: "#ffffff" }
-                      : { color: "#64748b" }}>
-                    {tf}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Chart area */}
-          <div className="flex-1 relative chart-grid overflow-hidden">
-            {/* Abstract bars */}
-            <div className="absolute inset-0 flex flex-col justify-end p-8">
-              <div className="w-full h-2/3 flex items-end gap-1 opacity-40">
-                {CHART_BARS.map((bar, i) => (
-                  <div key={i} className="flex-1"
-                    style={{
-                      height: bar.h,
-                      backgroundColor: bar.up ? "rgba(13,242,128,0.2)" : "rgba(255,77,77,0.2)",
-                      borderTop: `2px solid ${bar.up ? "#0df280" : "#ff4d4d"}`,
-                    }} />
-                ))}
-              </div>
-            </div>
-
-            {/* Floating timer */}
-            <div className="absolute top-6 right-6 p-4 rounded-xl shadow-2xl z-10"
-              style={{ backgroundColor: "rgba(15,23,42,0.9)", backdropFilter: "blur(12px)", border: "1px solid rgba(13,242,128,0.3)" }}>
-              <div className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "#0df280" }}>Next Round In</div>
-              <div className="flex items-center gap-2">
-                <div className="flex flex-col items-center">
-                  <span className="text-3xl font-black text-white">04</span>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Min</span>
-                </div>
-                <span className="text-3xl font-black animate-pulse" style={{ color: "#0df280" }}>:</span>
-                <div className="flex flex-col items-center">
-                  <span className="text-3xl font-black text-white">59</span>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">Sec</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Whale alert */}
-            <div className="absolute left-6 bottom-6 p-3 rounded-lg flex items-center gap-3"
-              style={{ backgroundColor: "rgba(15,23,42,0.8)", border: "1px solid #334155" }}>
-              <div className="w-2 h-2 rounded-full animate-ping" style={{ backgroundColor: "#0df280" }} />
-              <span className="text-xs font-medium">
-                New whale entry: <span style={{ color: "#0df280" }}>24,000 USDC</span> on UP
+    <div
+      style={{ backgroundColor: "#0a0a0a" }}
+      className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
+    >
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-8">
+            <Link href="/" className="flex items-center gap-2">
+              <span
+                className="material-symbols-outlined text-3xl"
+                style={{ color: "#0df280" }}
+              >
+                swords
               </span>
-            </div>
+              <h1 className="text-lg font-black tracking-tighter uppercase italic">
+                GameFi <span style={{ color: "#0df280" }}>Arena</span>
+              </h1>
+            </Link>
+            <nav className="hidden md:flex items-center gap-6">
+              <Link
+                href="/tournaments"
+                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                Tournaments
+              </Link>
+              {isAdmin && (
+                <span
+                  className="text-sm font-bold uppercase tracking-wider"
+                  style={{
+                    color: "#0df280",
+                    borderBottom: "2px solid #0df280",
+                    paddingBottom: "2px",
+                  }}
+                >
+                  Create Tournaments
+                </span>
+              )}
+              <Link
+                href="/leaderboard"
+                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                Leaderboard
+              </Link>
+              <Link
+                href="/profile"
+                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                My Arena
+              </Link>
+            </nav>
           </div>
-
-          {/* Active Positions footer */}
-          <div className="p-4 shrink-0" style={{ backgroundColor: "rgba(15,23,42,0.8)", borderTop: "1px solid #1e293b" }}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold flex items-center gap-2">
-                <span className="material-symbols-outlined leading-none" style={{ color: "#0df280", fontSize: "16px" }}>history</span>
-                Active Positions
-              </h3>
-              <span className="text-[10px] text-slate-500">Auto-refreshing...</span>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              {[
-                { label: "Side",        value: "UP",           valueStyle: { color: "#0df280" }, icon: "arrow_upward" },
-                { label: "Staked",      value: "100.00 USDC",  valueStyle: { color: "#ffffff" }, icon: null },
-                { label: "Entry Price", value: "$64,192.10",   valueStyle: { color: "#ffffff" }, icon: null },
-                { label: "Est. Payout", value: "184.20 USDC",  valueStyle: { color: "#0df280" }, icon: null },
-              ].map((col) => (
-                <div key={col.label} className="p-3 rounded-lg flex flex-col"
-                  style={{ backgroundColor: "rgba(30,41,59,0.5)", border: "1px solid #334155" }}>
-                  <span className="text-[10px] text-slate-500 font-bold uppercase">{col.label}</span>
-                  <span className="font-bold flex items-center gap-1" style={col.valueStyle}>
-                    {col.icon && <span className="material-symbols-outlined leading-none" style={{ fontSize: "14px" }}>{col.icon}</span>}
-                    {col.value}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center gap-3">
+            {account ? <WalletMenu /> : <ConnectButton />}
           </div>
         </div>
+      </nav>
 
-        {/* Right: Prediction panel */}
-        <aside className="w-full lg:w-[400px] flex flex-col overflow-y-auto"
-          style={{ backgroundColor: "rgba(15,23,42,0.3)" }}>
-          <div className="p-6 flex-1">
-            <div className="mb-8">
-              <h2 className="text-xl font-black text-white mb-2">Predict &amp; Earn</h2>
-              <p className="text-sm text-slate-400">
-                Join the battle. If BTC price ends higher or lower in 5 minutes, you share the pool.
+      <main className="max-w-6xl mx-auto px-6 pt-28 pb-16">
+        <div className="mb-8">
+          <h2 className="text-4xl font-black tracking-tighter uppercase italic mb-2">
+            Create <span style={{ color: "#0df280" }}>Tournament</span>
+          </h2>
+          <p className="text-slate-500 font-medium">
+            Admin panel for creating tournament session and reviewing cancellation board.
+          </p>
+        </div>
+
+        {!account && (
+          <div className="glass-panel rounded-2xl p-6 text-center">
+            <p className="text-sm text-slate-300 mb-4">
+              Connect wallet first to create tournament.
+            </p>
+            <div className="inline-flex">
+              <ConnectButton />
+            </div>
+          </div>
+        )}
+
+        {account && !isAdmin && (
+          <div className="glass-panel rounded-2xl p-6">
+            <div
+              className="rounded-xl p-4"
+              style={{
+                backgroundColor: "rgba(255,77,77,0.1)",
+                border: "1px solid rgba(255,77,77,0.25)",
+              }}
+            >
+              <p className="text-sm font-bold text-red-300 mb-1">
+                Unauthorized wallet
+              </p>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                This wallet is not allowed to create tournaments. Ask admin to add your address to{" "}
+                <code>NEXT_PUBLIC_CREATE_TOURNAMENT_ADMINS</code>.
               </p>
             </div>
+          </div>
+        )}
 
-            {/* UP / DOWN toggles */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              {/* UP */}
-              <button onClick={() => setDirection("up")} className="relative p-4 rounded-xl text-left transition-all"
-                style={direction === "up"
-                  ? { border: "2px solid #0df280", backgroundColor: "rgba(13,242,128,0.05)" }
-                  : { border: "2px solid #1e293b", backgroundColor: "rgba(30,41,59,0.2)" }}>
-                <div className="flex justify-between items-start mb-4">
-                  <span className="material-symbols-outlined leading-none" style={{ fontSize: "2rem", color: "#0df280" }}>trending_up</span>
-                  <span className="text-xs px-2 py-0.5 rounded font-bold" style={{ backgroundColor: "rgba(13,242,128,0.2)", color: "#0df280" }}>1.84x</span>
-                </div>
-                <div className="text-lg font-black text-white">UP</div>
-                <div className="text-[10px] text-slate-500 font-bold uppercase mt-1">Pool: 45.2K USDC</div>
-                {direction === "up" && (
-                  <div className="absolute -top-2 -right-2">
-                    <span className="material-symbols-outlined fill-1" style={{ color: "#0df280", fontSize: "20px" }}>check_circle</span>
-                  </div>
-                )}
-              </button>
+        {account && isAdmin && (
+          <div className="space-y-8">
+            <form onSubmit={onSubmit} className="glass-panel rounded-2xl p-6 space-y-5">
+              <h3 className="text-lg font-black uppercase tracking-wider">Create Tournament</h3>
 
-              {/* DOWN */}
-              <button onClick={() => setDirection("down")} className="p-4 rounded-xl text-left transition-all"
-                style={direction === "down"
-                  ? { border: "2px solid #ff4d4d", backgroundColor: "rgba(255,77,77,0.05)" }
-                  : { border: "2px solid #1e293b", backgroundColor: "rgba(30,41,59,0.2)" }}>
-                <div className="flex justify-between items-start mb-4">
-                  <span className="material-symbols-outlined leading-none" style={{ fontSize: "2rem", color: "#ff4d4d" }}>trending_down</span>
-                  <span className="text-xs px-2 py-0.5 rounded font-bold" style={{ backgroundColor: "rgba(255,77,77,0.2)", color: "#ff4d4d" }}>2.12x</span>
-                </div>
-                <div className="text-lg font-black text-white">DOWN</div>
-                <div className="text-[10px] text-slate-500 font-bold uppercase mt-1">Pool: 38.1K USDC</div>
-              </button>
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Round ID
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.roundId}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, roundId: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                  />
+                </label>
 
-            {/* Stake input */}
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Stake Amount</label>
-                  <span className="text-xs text-slate-500">Balance: {balance.toLocaleString()} USDC</span>
-                </div>
-                <div className="relative">
-                  <input type="number" placeholder="0.00" value={stake}
-                    onChange={(e) => setStake(e.target.value)}
-                    className="w-full py-4 px-4 text-white text-xl font-bold rounded-lg focus:outline-none transition-all"
-                    style={{ backgroundColor: "rgba(30,41,59,0.5)", border: "1px solid #334155" }} />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">USDC</div>
-                </div>
-                <div className="grid grid-cols-4 gap-2 mt-3">
-                  {[25, 50, 75].map((pct) => (
-                    <button key={pct}
-                      onClick={() => setStake(((balance * pct) / 100).toFixed(2))}
-                      className="py-2 rounded text-[10px] font-bold uppercase text-slate-400 transition-colors hover:text-white"
-                      style={{ backgroundColor: "#1e293b" }}>
-                      {pct}%
-                    </button>
-                  ))}
-                  <button onClick={() => setStake(balance.toFixed(2))}
-                    className="py-2 rounded text-[10px] font-bold uppercase transition-colors"
-                    style={{ backgroundColor: "rgba(13,242,128,0.1)", color: "#0df280", border: "1px solid rgba(13,242,128,0.3)" }}>
-                    Max
-                  </button>
-                </div>
-              </div>
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Season ID
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.seasonId}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, seasonId: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                  />
+                </label>
 
-              {/* Pool stats */}
-              <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: "rgba(30,41,59,0.3)", border: "1px solid #1e293b" }}>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Total Pool Size</span>
-                  <span className="text-white font-bold">83,300 USDC</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Protocol Fee (Lossless)</span>
-                  <span className="font-bold" style={{ color: "#0df280" }}>0.00%</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-500">Network Fee</span>
-                  <span className="text-white font-bold">~0.02 USDC</span>
-                </div>
-                <div className="pt-2 flex justify-between" style={{ borderTop: "1px solid #1e293b" }}>
-                  <span className="text-sm font-bold">Your Win Payout</span>
-                  <span className="text-lg font-black" style={{ color: "#0df280" }}>{payout} USDC</span>
-                </div>
-              </div>
-
-              {/* Confirm button */}
-              <button
-                disabled={!stake || parseFloat(stake) <= 0}
-                className="w-full py-5 rounded-xl text-lg font-black tracking-tight transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50"
-                style={{ backgroundColor: "#0df280", color: "#102219", boxShadow: "0 0 20px rgba(13,242,128,0.3)" }}>
-                <span className="material-symbols-outlined leading-none">bolt</span>
-                CONFIRM PREDICTION
-              </button>
-
-              {/* Lossless info */}
-              <div className="flex items-start gap-3 p-4 rounded-lg"
-                style={{ backgroundColor: "rgba(13,242,128,0.05)", border: "1px solid rgba(13,242,128,0.1)" }}>
-                <span className="material-symbols-outlined mt-0.5 leading-none text-lg" style={{ color: "#0df280" }}>verified_user</span>
-                <div>
-                  <p className="text-[11px] font-bold uppercase mb-1" style={{ color: "#0df280" }}>Lossless Mechanic Enabled</p>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    Your principal is protected by OneChain yield generation. Only yield is used for the prediction pool.
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Coin Symbol (Finnhub BINANCE/USDT)
+                  </span>
+                  <select
+                    value={selectedCoinSymbol}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, coinSymbol: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30 text-slate-100"
+                  >
+                    {availableSymbols.length === 0 && (
+                      <option value={form.coinSymbol} style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>
+                        {symbolsQuery.isLoading ? "Loading symbols..." : form.coinSymbol}
+                      </option>
+                    )}
+                    {availableSymbols.map((symbol) => (
+                      <option
+                        key={symbol}
+                        value={symbol}
+                        style={{ color: "#0f172a", backgroundColor: "#ffffff" }}
+                      >
+                        {symbol}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 font-bold">
+                    {symbolsQuery.isError
+                      ? "Failed loading symbols from Finnhub. Please retry."
+                      : `${availableSymbols.length} symbols loaded from Finnhub /crypto/symbol`}
                   </p>
-                </div>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Entry Fee (raw)
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.entryFeeRaw}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, entryFeeRaw: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                    placeholder="100000000"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Start Time
+                  </span>
+                  <input
+                    type="datetime-local"
+                    value={form.startTime}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, startTime: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    End Time
+                  </span>
+                  <input
+                    type="datetime-local"
+                    value={form.endTime}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, endTime: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                  />
+                </label>
               </div>
-            </div>
-          </div>
 
-          {/* Footer */}
-          <div className="p-6 shrink-0" style={{ borderTop: "1px solid #1e293b", backgroundColor: "#102219" }}>
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest text-slate-500">
-              <span>24H Volume</span>
-              <span className="text-white">2.4M USDC</span>
-            </div>
+              <label className="space-y-2 block">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Early Window Minutes
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.earlyWindowMinutes}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      earlyWindowMinutes: event.target.value,
+                    }))
+                  }
+                  className="w-full md:w-64 px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                />
+              </label>
+
+              {validation && (
+                <div
+                  className="rounded-xl p-3 text-xs font-bold"
+                  style={{
+                    backgroundColor: "rgba(255,77,77,0.1)",
+                    color: "#ff9a9a",
+                    border: "1px solid rgba(255,77,77,0.2)",
+                  }}
+                >
+                  {validation}
+                </div>
+              )}
+
+              {isError && (
+                <div
+                  className="rounded-xl p-3 text-xs font-bold"
+                  style={{
+                    backgroundColor: "rgba(255,77,77,0.1)",
+                    color: "#ff9a9a",
+                    border: "1px solid rgba(255,77,77,0.2)",
+                  }}
+                >
+                  {error?.message ?? "Create tournament transaction failed"}
+                </div>
+              )}
+
+              {isSuccess && (
+                <div
+                  className="rounded-xl p-3 text-xs font-bold"
+                  style={{
+                    backgroundColor: "rgba(13,242,128,0.15)",
+                    color: "#0df280",
+                    border: "1px solid rgba(13,242,128,0.25)",
+                  }}
+                >
+                  Tournament transaction submitted successfully.
+                  {txDigest && (
+                    <a
+                      href={`${EXPLORER_BASE}/txblock/${txDigest}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-2 underline"
+                    >
+                      View tx
+                    </a>
+                  )}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={Boolean(validation) || isPending}
+                className="px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: "#0df280", color: "#0a0a0a" }}
+              >
+                {isPending ? "Creating..." : "Create Tournament"}
+              </button>
+            </form>
+
+            <section className="glass-panel rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black uppercase tracking-wider">
+                  Tournament Control Board
+                </h3>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
+                  Start round available
+                </span>
+              </div>
+
+              <p className="text-xs text-slate-400 mb-5">
+                Use <span className="font-bold text-slate-300">Start</span> to run upcoming tournament.
+                Cancel is still disabled because Move module has no cancel entrypoint yet.
+              </p>
+
+              {startMessage && (
+                <div
+                  className="rounded-xl p-3 text-xs font-bold mb-4"
+                  style={
+                    isStartError
+                      ? {
+                          backgroundColor: "rgba(255,77,77,0.1)",
+                          color: "#ff9a9a",
+                          border: "1px solid rgba(255,77,77,0.2)",
+                        }
+                      : {
+                          backgroundColor: "rgba(13,242,128,0.15)",
+                          color: "#0df280",
+                          border: "1px solid rgba(13,242,128,0.25)",
+                        }
+                  }
+                >
+                  {startMessage}
+                  {startTxDigest && (
+                    <a
+                      href={`${EXPLORER_BASE}/txblock/${startTxDigest}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-2 underline"
+                    >
+                      View tx
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {tournamentsQuery.isLoading && (
+                <p className="text-sm text-slate-400">Loading tournaments...</p>
+              )}
+
+              {!tournamentsQuery.isLoading && tournaments.length === 0 && (
+                <p className="text-sm text-slate-400">No tournaments found on-chain.</p>
+              )}
+
+              {!tournamentsQuery.isLoading && tournaments.length > 0 && (
+                <div className="overflow-x-auto rounded-xl">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                        {["Session", "Coin", "Status", "Start", "End", "Participants", "Actions"].map(
+                          (header) => (
+                            <th
+                              key={header}
+                              className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500"
+                            >
+                              {header}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tournaments.map((tournament) => (
+                        <tr
+                          key={tournament.sessionId}
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+                        >
+                          <td className="px-4 py-3 text-xs font-mono text-slate-400">
+                            {tournament.sessionId.slice(0, 12)}...
+                          </td>
+                          <td className="px-4 py-3 text-sm font-bold">
+                            {tournament.coinSymbol} / USDT
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className="text-[10px] font-black px-2 py-1 rounded uppercase"
+                              style={
+                                tournament.status === "live"
+                                  ? { color: "#0df280", backgroundColor: "rgba(13,242,128,0.15)" }
+                                  : tournament.status === "upcoming"
+                                    ? {
+                                        color: "#f59e0b",
+                                        backgroundColor: "rgba(245,158,11,0.15)",
+                                      }
+                                    : {
+                                        color: "#94a3b8",
+                                        backgroundColor: "rgba(148,163,184,0.15)",
+                                      }
+                              }
+                            >
+                              {tournament.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">
+                            {formatDateTime(tournament.startTimeMs)}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-400">
+                            {formatDateTime(tournament.endTimeMs)}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-300">
+                            {tournament.totalParticipants}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={
+                                  isStartPending ||
+                                  tournament.status === "ended" ||
+                                  tournament.isActive
+                                }
+                                onClick={() =>
+                                  handleStartTournament(
+                                    tournament.roundObjectId,
+                                    tournament.coinSymbol,
+                                  )
+                                }
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{
+                                  backgroundColor: "rgba(13,242,128,0.18)",
+                                  color: "#0df280",
+                                  border: "1px solid rgba(13,242,128,0.35)",
+                                }}
+                                title={
+                                  tournament.isActive
+                                    ? "Round already active."
+                                    : "Run start_game admin transaction."
+                                }
+                              >
+                                {isStartPending ? "Starting..." : tournament.isActive ? "Live" : "Start"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider opacity-60 cursor-not-allowed"
+                                style={{
+                                  backgroundColor: "rgba(239,68,68,0.18)",
+                                  color: "#fca5a5",
+                                  border: "1px solid rgba(239,68,68,0.35)",
+                                }}
+                                title="Add cancel function in Move module first (e.g. game_controller::cancel_game_session)."
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {isStartError && startError && (
+                <p className="text-xs text-red-400 font-bold mt-3">
+                  {startError.message}
+                </p>
+              )}
+            </section>
           </div>
-        </aside>
+        )}
       </main>
-
-      {/* Mobile bottom nav */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 px-6 py-4 flex justify-around z-50"
-        style={{ backgroundColor: "#102219", borderTop: "1px solid #1e293b" }}>
-        {[
-          { icon: "query_stats", label: "Arena",     href: "/arena",       active: true },
-          { icon: "leaderboard", label: "Rank",      href: "/leaderboard", active: false },
-          { icon: "history",     label: "History",   href: "/profile",     active: false },
-          { icon: "settings",    label: "Set",       href: "#",            active: false },
-        ].map((item) => (
-          <Link key={item.label} href={item.href}
-            className="flex flex-col items-center gap-1"
-            style={{ color: item.active ? "#0df280" : "#64748b" }}>
-            <span className="material-symbols-outlined leading-none" style={{ fontSize: "24px" }}>{item.icon}</span>
-            <span className="text-[10px] font-bold uppercase">{item.label}</span>
-          </Link>
-        ))}
-      </div>
     </div>
   );
 }

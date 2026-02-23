@@ -3,20 +3,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
-import { Zap, BarChart2, User, Menu, X } from "lucide-react";
+import { Zap, BarChart2, User, Menu, X, PlusCircle } from "lucide-react";
 import { useState } from "react";
-import { shortenAddress } from "@/lib/constants";
-
-const NAV_LINKS = [
-  { href: "/arena", label: "Arena", icon: Zap },
-  { href: "/leaderboard", label: "Leaderboard", icon: BarChart2 },
-  { href: "/profile", label: "Profile", icon: User },
-];
+import { isCreateTournamentAdmin, shortenAddress } from "@/lib/constants";
 
 export default function Navbar() {
   const pathname = usePathname();
   const account = useCurrentAccount();
+  const isAdmin = isCreateTournamentAdmin(account?.address);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navLinks = [
+    { href: "/tournaments", label: "Tournaments", icon: Zap },
+    ...(isAdmin
+      ? [{ href: "/arena", label: "Create Tournaments", icon: PlusCircle }]
+      : []),
+    { href: "/leaderboard", label: "Leaderboard", icon: BarChart2 },
+    { href: "/profile", label: "My Arena", icon: User },
+  ];
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/[0.07]" style={{ background: "rgba(7,8,15,0.85)", backdropFilter: "blur(20px)" }}>
@@ -33,7 +36,7 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-1">
-          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
+          {navLinks.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
@@ -80,8 +83,8 @@ export default function Navbar() {
       {/* Mobile dropdown */}
       {mobileOpen && (
         <div className="md:hidden border-t border-white/[0.06] px-4 py-3 space-y-1 animate-fade-in">
-          {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
+          {navLinks.map(({ href, label, icon: Icon }) => {
+            const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}

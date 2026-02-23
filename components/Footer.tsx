@@ -25,9 +25,9 @@ export default function Footer() {
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Navigate</p>
             <div className="space-y-2">
               {[
-                { href: "/arena", label: "Arena" },
+                { href: "/tournaments", label: "Tournaments" },
                 { href: "/leaderboard", label: "Leaderboard" },
-                { href: "/profile", label: "Profile" },
+                { href: "/profile", label: "My Arena" },
               ].map(({ href, label }) => (
                 <Link
                   key={href}

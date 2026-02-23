@@ -26,19 +26,30 @@ export default function CountdownTimer({
   size = "md",
   showIcon = true,
 }: CountdownTimerProps) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
+    const tick = () => setNow(Date.now());
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
-
-  const { m, s, urgent } = formatCountdown(endTime - now);
-  const ended = endTime - now <= 0;
 
   const textSize =
     size === "sm" ? "text-sm" : size === "lg" ? "text-2xl font-bold" : "text-base font-semibold";
   const iconSize = size === "sm" ? 12 : size === "lg" ? 18 : 14;
+
+  if (now === null) {
+    return (
+      <span className={`${textSize} text-gray-400 flex items-center gap-1.5 stat-number`}>
+        {showIcon && <Clock size={iconSize} />}
+        --:--
+      </span>
+    );
+  }
+
+  const { m, s, urgent } = formatCountdown(endTime - now);
+  const ended = endTime - now <= 0;
 
   if (ended) {
     return (

@@ -167,7 +167,7 @@ export default function LandingPage() {
             </h2>
             <p className="text-slate-500 font-medium">Predict the next 5-minute price movement</p>
           </div>
-          <Link href="/arena"
+          <Link href="/tournaments"
             style={{ color: "#0df280" }}
             className="text-sm font-bold uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
             All Markets

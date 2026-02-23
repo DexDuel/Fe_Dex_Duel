@@ -1,180 +1,362 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCurrentAccount, ConnectButton } from "@onelabs/dapp-kit";
-import { useUSDTBalance } from "@/hooks/useUSDTBalance";
+import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
+import { WalletMenu } from "@/components/WalletMenu";
 import { useFaucet } from "@/hooks/useFaucet";
 import { useJoinGame } from "@/hooks/useJoinGame";
-import { WalletMenu } from "@/components/WalletMenu";
 import {
-  ACTIVE_GAME_SESSIONS,
+  toFinnhubSymbol,
+  useMarketCandles,
+  useMarketQuote,
+} from "@/hooks/useMarketData";
+import {
+  useOnChainTournaments,
+  useRoundJoinEvents,
+} from "@/hooks/useOnChainTournaments";
+import { useUSDTBalance } from "@/hooks/useUSDTBalance";
+import {
   DIRECTION,
-  formatUSDT,
   EXPLORER_BASE,
+  formatUSDT,
+  isCreateTournamentAdmin,
+  shortenAddress,
 } from "@/lib/constants";
 
-/* ── Mock fallback data (shown when no on-chain session is configured) ── */
-const MOCK = {
-  name: "BTC Grand Championship",
-  pair: "BTC / USDT",
-  icon: "currency_bitcoin",
-  accent: "#0df280",
-  status: "live" as const,
-  entryFeeDisplay: "100 USDT",
-  prizePool: "Prize from yield",
-  totalRounds: 5,
-  currentRound: 3,
-  roundDuration: "5 min",
-  currentPrice: "$64,281.50",
-  lockedPrice: "$64,198.20",
-  timeLeft: "03:42",
-};
+type PickDirection = 1 | 2;
 
-const ROUND_HISTORY = [
-  { round: 1, lockedPrice: "$63,812.00", closedPrice: "$64,021.50", result: "UP",  myPick: "UP",   outcome: "win",  pts: 120 },
-  { round: 2, lockedPrice: "$64,021.50", closedPrice: "$63,950.00", result: "DOWN", myPick: "DOWN", outcome: "win",  pts: 110 },
-];
+function formatDateTime(timestampMs: number): string {
+  if (!timestampMs) return "-";
+  return new Date(timestampMs).toLocaleString();
+}
 
-const LEADERBOARD = [
-  { rank: 1,  addr: "0x7a...E921", rounds: 2, wins: 2, pts: 248, streak: 2 },
-  { rank: 2,  addr: "0xf1...3B2a", rounds: 2, wins: 2, pts: 221, streak: 2 },
-  { rank: 3,  addr: "0x98...C11d", rounds: 2, wins: 2, pts: 215, streak: 2 },
-  { rank: 4,  addr: "0xAB...9F3e", rounds: 2, wins: 1, pts: 120, streak: 0 },
-  { rank: 5,  addr: "0xcc...2D1f", rounds: 2, wins: 1, pts: 110, streak: 1 },
-  { rank: 6,  addr: "0x12...88Ba", rounds: 2, wins: 1, pts: 105, streak: 0 },
-  { rank: 7,  addr: "You",         rounds: 2, wins: 2, pts: 230, streak: 2, isMe: true },
-  { rank: 8,  addr: "0x34...4Cd2", rounds: 2, wins: 0, pts: 0,   streak: 0 },
-].sort((a, b) => b.pts - a.pts).map((p, i) => ({ ...p, rank: i + 1 }));
+function formatTimeLeft(targetMs: number): string {
+  const diff = targetMs - Date.now();
+  if (diff <= 0) return "0m";
 
-const MY_RANK = LEADERBOARD.find((p) => p.isMe)?.rank ?? 0;
-const MY_PTS  = LEADERBOARD.find((p) => p.isMe)?.pts  ?? 0;
+  const totalMinutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
 
-type Pick = "UP" | "DOWN" | null;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
 
-/* ── Faucet button component ─────────────────────────────────────── */
-function FaucetButton({ address, onSuccess }: { address: string; onSuccess?: () => void }) {
-  const { claimFaucet, isPending, isSuccess } = useFaucet();
+function formatDirection(direction: number): "UP" | "DOWN" {
+  return direction === DIRECTION.DOWN ? "DOWN" : "UP";
+}
+
+function buildChartPolyline(values: number[]): string {
+  if (values.length < 2) return "";
+
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const range = Math.max(0.0000001, maxValue - minValue);
+
+  return values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * 100;
+      const y = 100 - ((value - minValue) / range) * 100;
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function FaucetButton({
+  address,
+  onSuccess,
+}: {
+  address: string;
+  onSuccess?: () => void;
+}) {
+  const { claimFaucet, isPending, isSuccess, isError, error } = useFaucet();
 
   async function handleClaim() {
     try {
       await claimFaucet(address);
       onSuccess?.();
     } catch {
-      // error shown via isError state if needed
+      // Error is shown below via hook state.
     }
   }
 
   if (isSuccess) {
     return (
-      <span className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
-        style={{ backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280" }}>
-        <span className="material-symbols-outlined text-sm leading-none">check_circle</span>
-        +100 USDT sent!
+      <span
+        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
+        style={{ backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280" }}
+      >
+        <span className="material-symbols-outlined text-sm leading-none">
+          check_circle
+        </span>
+        +100 USDT sent
       </span>
     );
   }
 
   return (
-    <button
-      onClick={handleClaim}
-      disabled={isPending}
-      className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all hover:opacity-80 disabled:opacity-50"
-      style={{ backgroundColor: "rgba(13,242,128,0.12)", color: "#0df280", border: "1px solid rgba(13,242,128,0.25)" }}>
-      <span className="material-symbols-outlined text-sm leading-none">water_drop</span>
-      {isPending ? "Claiming…" : "Get 100 USDT"}
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={handleClaim}
+        disabled={isPending}
+        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all hover:opacity-80 disabled:opacity-50"
+        style={{
+          backgroundColor: "rgba(13,242,128,0.12)",
+          color: "#0df280",
+          border: "1px solid rgba(13,242,128,0.25)",
+        }}
+      >
+        <span className="material-symbols-outlined text-sm leading-none">
+          water_drop
+        </span>
+        {isPending ? "Claiming..." : "Get 100 USDT"}
+      </button>
+      {isError && (
+        <span className="text-[10px] font-bold text-red-400 max-w-64 text-right leading-tight">
+          {error?.message ?? "Faucet transaction failed"}
+        </span>
+      )}
+    </div>
   );
 }
 
 export default function TournamentDetailPage() {
   const params = useParams();
-  const sessionIdx = Number(params.id) - 1;
-  const sessionConfig = ACTIVE_GAME_SESSIONS[sessionIdx] ?? null;
-  const isDemo = !sessionConfig;
-
   const account = useCurrentAccount();
+  const isAdmin = isCreateTournamentAdmin(account?.address);
+
+  const routeId = params?.id;
+  const sessionId = Array.isArray(routeId) ? routeId[0] : routeId;
+
+  const tournamentsQuery = useOnChainTournaments();
+  const tournaments = useMemo(() => tournamentsQuery.data ?? [], [tournamentsQuery.data]);
+
+  const tournament = useMemo(() => {
+    if (!sessionId) return null;
+    return (
+      tournaments.find(
+        (item) => item.sessionId.toLowerCase() === sessionId.toLowerCase(),
+      ) ?? null
+    );
+  }, [sessionId, tournaments]);
+
   const { balance, refetch: refetchBalance } = useUSDTBalance(account?.address);
-  const { joinGame, isPending: joinPending, isSuccess: joinSuccess, isError: joinError, error: joinErr, reset: resetJoin } = useJoinGame();
+  const {
+    joinGame,
+    isPending: isJoinPending,
+    isSuccess: isJoinSuccess,
+    isError: isJoinError,
+    error: joinError,
+    reset: resetJoin,
+  } = useJoinGame();
 
-  const [pick, setPick]         = useState<Pick>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [txDigest, setTxDigest]   = useState<string | null>(null);
-  const [demoSubmitted, setDemoSubmitted] = useState(false);
+  const joinEventsQuery = useRoundJoinEvents(tournament?.roundNumber);
+  const joinEvents = useMemo(
+    () => (joinEventsQuery.data ?? []).slice(0, 12),
+    [joinEventsQuery.data],
+  );
 
-  const t = MOCK;
-  const entryFeeRaw  = sessionConfig?.entryFeeRaw ?? 100_000_000;
-  const hasEnoughBalance = balance ? balance.raw >= BigInt(entryFeeRaw) : false;
+  const finnhubSymbol = tournament ? toFinnhubSymbol(tournament.coinSymbol) : undefined;
+  const quoteQuery = useMarketQuote(finnhubSymbol);
+  const candlesQuery = useMarketCandles(finnhubSymbol, "5", 6);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
-  async function handleSubmit() {
-    if (!pick) return;
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-    // Demo mode — just show local feedback
-    if (isDemo || !account) {
-      setDemoSubmitted(true);
+  const candlePrices = useMemo(() => {
+    const candles = candlesQuery.data;
+    if (!candles || candles.s !== "ok") return [] as number[];
+    return candles.c
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+  }, [candlesQuery.data]);
+  const quoteAnimatedPrices = useMemo(() => {
+    const quote = quoteQuery.data;
+    if (!quote) return [] as number[];
+    const current = Number(quote.c);
+    if (!Number.isFinite(current) || current <= 0) return [] as number[];
+
+    const drift = Number(quote.dp) / 100;
+    const points = 90;
+    const phase = Math.floor(nowMs / 1000);
+
+    return Array.from({ length: points }, (_, index) => {
+      const progress = index / (points - 1);
+      const trend = current * (1 + drift * 0.02 * (progress - 0.5));
+      const waveA = current * 0.0012 * Math.sin((phase + index) * 0.55);
+      const waveB = current * 0.0006 * Math.sin((phase + index) * 1.15);
+      return Math.max(0.0000001, trend + waveA + waveB);
+    });
+  }, [quoteQuery.data, nowMs]);
+
+  const effectiveChartPrices = useMemo(() => {
+    if (candlePrices.length >= 2) return candlePrices;
+    return quoteAnimatedPrices;
+  }, [candlePrices, quoteAnimatedPrices]);
+
+  const usingQuoteFallback = candlePrices.length < 2 && quoteAnimatedPrices.length >= 2;
+  const chartPoints = useMemo(
+    () => buildChartPolyline(effectiveChartPrices),
+    [effectiveChartPrices],
+  );
+
+  const [selectedDirection, setSelectedDirection] = useState<PickDirection | null>(null);
+  const [txDigest, setTxDigest] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isJoinHighlighted, setIsJoinHighlighted] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const runJoinHighlight = () => {
+      if (window.location.hash !== "#join-tournament") return;
+
+      setIsJoinHighlighted(true);
+      timer = setTimeout(() => setIsJoinHighlighted(false), 2200);
+    };
+
+    runJoinHighlight();
+    window.addEventListener("hashchange", runJoinHighlight);
+
+    return () => {
+      window.removeEventListener("hashchange", runJoinHighlight);
+      if (timer) clearTimeout(timer);
+    };
+  }, [sessionId]);
+
+  const entryFeeRaw = tournament?.entryFeeRaw ?? 0;
+  const liveStatus = useMemo(() => {
+    if (!tournament) return "upcoming" as const;
+    if (tournament.status === "ended") return "ended" as const;
+    if (tournament.isActive) return "live" as const;
+    if (nowMs >= tournament.endTimeMs) return "ended" as const;
+    return "upcoming" as const;
+  }, [tournament, nowMs]);
+
+  const hasEnoughBalance =
+    tournament && balance ? balance.raw >= BigInt(tournament.entryFeeRaw) : false;
+
+  const canSubmit =
+    Boolean(account) &&
+    Boolean(tournament) &&
+    liveStatus === "live" &&
+    Boolean(selectedDirection) &&
+    Boolean(balance?.largestCoin) &&
+    hasEnoughBalance &&
+    !isJoinPending;
+
+  async function handleSubmitPrediction() {
+    if (!account || !tournament || !selectedDirection) return;
+    if (liveStatus !== "live") {
+      setSubmitError("Tournament is not live.");
+      return;
+    }
+    if (!balance?.largestCoin) {
+      setSubmitError("No OUSDT coin object found. Claim faucet first.");
       return;
     }
 
-    // No USDT coin to pay with
-    if (!balance?.largestCoin) return;
-
+    setSubmitError(null);
     try {
       const result = await joinGame({
-        sessionId:       sessionConfig.sessionId,
-        roundId:         sessionConfig.roundId,
-        registryId:      sessionConfig.registryId,
-        direction:       pick === "UP" ? DIRECTION.UP : DIRECTION.DOWN,
+        sessionId: tournament.sessionId,
+        roundId: tournament.roundObjectId,
+        registryId: tournament.registryId,
+        direction: selectedDirection,
         usdtCoinObjectId: balance.largestCoin.coinObjectId,
-        entryFeeRaw,
+        entryFeeRaw: tournament.entryFeeRaw,
       });
+
       setTxDigest(result.digest ?? null);
-      setSubmitted(true);
       refetchBalance();
-    } catch {
-      // joinError / joinErr will be populated
+      await joinEventsQuery.refetch();
+    } catch (error) {
+      if (error instanceof Error) {
+        setSubmitError(error.message);
+      } else {
+        setSubmitError("Failed to submit prediction transaction.");
+      }
     }
   }
 
-  const isSubmitted = submitted || demoSubmitted || joinSuccess;
-  const isLoading   = joinPending;
-
   return (
-    <div style={{ backgroundColor: "#0a0a0a" }} className="text-slate-100 antialiased min-h-screen overflow-x-hidden">
-
-      {/* ── Nav ─────────────────────────────────────────────────────── */}
+    <div
+      style={{ backgroundColor: "#0a0a0a" }}
+      className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
+    >
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>swords</span>
+              <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>
+                swords
+              </span>
               <h1 className="text-lg font-black tracking-tighter uppercase italic">
                 GameFi <span style={{ color: "#0df280" }}>Arena</span>
               </h1>
             </Link>
-            <div className="hidden md:flex items-center gap-2 text-sm text-slate-500">
-              <Link href="/tournaments" className="hover:text-white transition-colors">Tournaments</Link>
-              <span className="material-symbols-outlined text-base leading-none">chevron_right</span>
-              <span className="text-white font-bold truncate max-w-48">{t.name}</span>
-            </div>
+            <nav className="hidden md:flex items-center gap-6">
+              <span
+                className="text-sm font-bold uppercase tracking-wider"
+                style={{
+                  color: "#0df280",
+                  borderBottom: "2px solid #0df280",
+                  paddingBottom: "2px",
+                }}
+              >
+                Tournaments
+              </span>
+              {isAdmin && (
+                <Link
+                  href="/arena"
+                  className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+                >
+                  Create Tournaments
+                </Link>
+              )}
+              <Link
+                href="/leaderboard"
+                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                Leaderboard
+              </Link>
+              <Link
+                href="/profile"
+                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
+              >
+                My Arena
+              </Link>
+            </nav>
           </div>
-
           <div className="flex items-center gap-3">
             {account ? (
               <>
-                {/* USDT balance */}
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold"
-                  style={{ backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <span className="material-symbols-outlined text-sm leading-none" style={{ color: "#0df280" }}>toll</span>
-                  <span>{balance ? `${balance.formatted} USDT` : "…"}</span>
+                <div
+                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined text-sm leading-none"
+                    style={{ color: "#0df280" }}
+                  >
+                    toll
+                  </span>
+                  <span>{balance ? `${balance.formatted} USDT` : "..."}</span>
                 </div>
 
-                {/* Faucet — show when balance is low */}
-                {(!balance || balance.raw < BigInt(entryFeeRaw)) && (
+                {tournament && (!balance || !hasEnoughBalance) && (
                   <FaucetButton address={account.address} onSuccess={refetchBalance} />
                 )}
-
-                {/* Wallet chip + disconnect dropdown */}
                 <WalletMenu />
               </>
             ) : (
@@ -184,410 +366,424 @@ export default function TournamentDetailPage() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto px-6 pt-24 pb-16">
+      <main className="max-w-7xl mx-auto px-6 pt-28 pb-16">
+        <div className="mb-6">
+          <Link
+            href="/tournaments"
+            className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white"
+          >
+            <span className="material-symbols-outlined text-sm leading-none">arrow_back</span>
+            Back to tournaments
+          </Link>
+        </div>
 
-        {/* ── Demo mode banner ───────────────────────────────────────── */}
-        {isDemo && (
-          <div className="rounded-xl px-5 py-3 mb-5 flex items-center gap-3 text-sm font-bold"
-            style={{ backgroundColor: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b" }}>
-            <span className="material-symbols-outlined text-xl leading-none">science</span>
-            <span>
-              Demo mode — no active on-chain session found for this tournament.
-              Predictions run locally without submitting a transaction.
-              Configure <code className="font-mono text-xs mx-1">ACTIVE_GAME_SESSIONS</code> in{" "}
-              <code className="font-mono text-xs">lib/constants.ts</code> to enable live play.
-            </span>
+        {tournamentsQuery.isLoading && (
+          <div className="glass-panel rounded-2xl p-8 text-center text-slate-400">
+            Loading tournament from on-chain data...
           </div>
         )}
 
-        {/* ── Tournament Header ──────────────────────────────────────── */}
-        <div className="glass-panel rounded-2xl p-6 mb-6 relative overflow-hidden">
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-5">
-            <span className="material-symbols-outlined" style={{ fontSize: "8rem" }}>{t.icon}</span>
+        {!tournamentsQuery.isLoading && !tournament && (
+          <div className="glass-panel rounded-2xl p-8 text-center">
+            <h2 className="text-xl font-black mb-2">Tournament not found</h2>
+            <p className="text-slate-400 text-sm mb-5">
+              Session ID <span className="font-mono">{sessionId ?? "-"}</span> is not available.
+            </p>
+            <Link
+              href="/tournaments"
+              className="inline-flex px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider"
+              style={{ backgroundColor: "#0df280", color: "#0a0a0a" }}
+            >
+              Return to list
+            </Link>
           </div>
+        )}
 
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-            {/* Left: name + meta */}
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-                style={{ backgroundColor: `${t.accent}18`, border: `2px solid ${t.accent}40` }}>
-                <span className="material-symbols-outlined text-3xl" style={{ color: t.accent }}>{t.icon}</span>
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h2 className="text-2xl font-black uppercase italic tracking-tighter">{t.name}</h2>
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider"
-                    style={{ backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280" }}>
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "#0df280" }} />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#0df280" }} />
-                    </span>
-                    LIVE
-                  </span>
-                </div>
-                <p className="text-slate-400 text-sm font-bold">
-                  {t.pair} · {t.roundDuration} rounds · {t.totalRounds} rounds total
-                </p>
-              </div>
-            </div>
-
-            {/* Round progress */}
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Round Progress</p>
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: t.totalRounds }).map((_, i) => (
-                  <div key={i} className="h-2 rounded-full transition-all"
-                    style={{
-                      width: i === t.currentRound - 1 ? "3rem" : "2rem",
-                      backgroundColor: i < t.currentRound - 1 ? "#0df280"
-                        : i === t.currentRound - 1 ? "#0df280"
-                        : "rgba(255,255,255,0.1)",
-                      opacity: i === t.currentRound - 1 ? 1 : i < t.currentRound - 1 ? 0.6 : 0.3,
-                      boxShadow: i === t.currentRound - 1 ? "0 0 8px #0df280" : "none",
-                    }} />
-                ))}
-              </div>
-              <p className="text-sm font-black">
-                Round <span style={{ color: "#0df280" }}>{t.currentRound}</span>
-                <span className="text-slate-500"> / {t.totalRounds}</span>
-              </p>
-            </div>
-
-            {/* Key stats */}
-            <div className="flex gap-6">
-              {[
-                { label: "Entry Fee",  value: isDemo ? t.entryFeeDisplay : `${formatUSDT(entryFeeRaw)} USDT`, color: t.accent },
-                { label: "My Balance", value: balance ? `${balance.formatted} USDT` : account ? "…" : "—", color: "#3b82f6" },
-                { label: "My Rank",    value: `#${MY_RANK}`, color: "#f59e0b" },
-                { label: "My Points",  value: `${MY_PTS} pts`, color: "#a855f7" },
-              ].map((s) => (
-                <div key={s.label} className="text-center">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">{s.label}</p>
-                  <p className="text-xl font-black" style={{ color: s.color }}>{s.value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Main grid ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6">
-
-          {/* ── Left: Current Round Prediction (3 cols) ─────────────── */}
-          <div className="lg:col-span-3 flex flex-col gap-4">
-
-            {/* Price card */}
-            <div className="glass-panel rounded-2xl p-6">
-              <div className="flex justify-between items-start mb-6">
+        {tournament && (
+          <>
+            <div className="glass-panel rounded-2xl p-6 mb-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
-                    Round {t.currentRound} of {t.totalRounds} — {t.pair}
-                  </p>
-                  <p className="text-4xl font-black" style={{ color: "#0df280" }}>{t.currentPrice}</p>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Locked at <span className="font-bold text-white">{t.lockedPrice}</span>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h2 className="text-3xl font-black tracking-tighter uppercase italic">
+                      {tournament.coinSymbol} / USDT
+                    </h2>
+                    <span
+                      className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider"
+                      style={
+                        liveStatus === "live"
+                          ? { color: "#0df280", backgroundColor: "rgba(13,242,128,0.12)" }
+                          : liveStatus === "upcoming"
+                            ? { color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.12)" }
+                            : { color: "#94a3b8", backgroundColor: "rgba(148,163,184,0.12)" }
+                      }
+                    >
+                      {liveStatus}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                    Season {tournament.seasonId || "-"} - Round {tournament.roundNumber || "-"}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Round Ends In</p>
-                  <p className="text-4xl font-black" style={{ color: "#f59e0b" }}>{t.timeLeft}</p>
-                  <p className="text-xs text-slate-500 mt-1">Next round starts immediately</p>
-                </div>
-              </div>
 
-              {/* Mini chart */}
-              <div className="w-full h-24 rounded-xl mb-6 relative overflow-hidden"
-                style={{ backgroundColor: "rgba(13,242,128,0.04)", border: "1px solid rgba(13,242,128,0.1)" }}>
-                <svg viewBox="0 0 300 80" className="w-full h-full" preserveAspectRatio="none">
-                  <polyline
-                    points="0,60 40,55 80,58 120,45 160,40 200,30 240,35 280,20 300,18"
-                    fill="none" stroke="#0df280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <polyline
-                    points="0,60 40,55 80,58 120,45 160,40 200,30 240,35 280,20 300,18 300,80 0,80"
-                    fill="url(#grad)" opacity="0.15" />
-                  <defs>
-                    <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0df280" />
-                      <stop offset="100%" stopColor="#0df280" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute top-2 right-3 text-[10px] font-bold uppercase tracking-widest" style={{ color: "#0df280" }}>
-                  +0.13% this round
-                </div>
-              </div>
-
-              {/* Prediction area */}
-              {isSubmitted ? (
-                <div>
-                  <div className="rounded-xl p-5 text-center mb-4"
-                    style={{ backgroundColor: pick === "UP" ? "rgba(13,242,128,0.1)" : "rgba(255,77,77,0.1)",
-                      border: `1px solid ${pick === "UP" ? "rgba(13,242,128,0.3)" : "rgba(255,77,77,0.3)"}` }}>
-                    <span className="material-symbols-outlined text-4xl block mb-2"
-                      style={{ color: pick === "UP" ? "#0df280" : "#ff4d4d" }}>
-                      {pick === "UP" ? "trending_up" : "trending_down"}
-                    </span>
-                    <p className="font-black uppercase text-lg" style={{ color: pick === "UP" ? "#0df280" : "#ff4d4d" }}>
-                      Predicted {pick}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <div className="glass-panel-light rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                      Entry
                     </p>
-                    <p className="text-slate-400 text-sm mt-1">Waiting for round to close…</p>
+                    <p className="font-black">{formatUSDT(tournament.entryFeeRaw)} USDT</p>
+                  </div>
+                  <div className="glass-panel-light rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                      Pool
+                    </p>
+                    <p className="font-black">{formatUSDT(tournament.totalPoolRaw)} USDT</p>
+                  </div>
+                  <div className="glass-panel-light rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                      Participants
+                    </p>
+                    <p className="font-black">{tournament.totalParticipants}</p>
+                  </div>
+                  <div className="glass-panel-light rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                      Time Left
+                    </p>
+                    <p className="font-black">
+                      {liveStatus === "upcoming"
+                        ? `Starts in ${formatTimeLeft(tournament.startTimeMs)}`
+                        : formatTimeLeft(tournament.endTimeMs)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2 flex flex-col gap-6">
+                <div className="glass-panel rounded-2xl p-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+                    <div>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">
+                        Live Market ({finnhubSymbol})
+                      </p>
+                      <p className="text-3xl font-black" style={{ color: "#0df280" }}>
+                        {quoteQuery.data ? `$${quoteQuery.data.c.toLocaleString()}` : "-"}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {quoteQuery.data
+                          ? `24h high $${quoteQuery.data.h.toLocaleString()} - 24h low $${quoteQuery.data.l.toLocaleString()}`
+                          : "Waiting for quote feed"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">
+                        24h Change
+                      </p>
+                      <p
+                        className="text-2xl font-black"
+                        style={{
+                          color:
+                            typeof quoteQuery.data?.dp === "number" && quoteQuery.data.dp < 0
+                              ? "#ef4444"
+                              : "#0df280",
+                        }}
+                      >
+                        {typeof quoteQuery.data?.dp === "number"
+                          ? `${quoteQuery.data.dp.toFixed(2)}%`
+                          : "-"}
+                      </p>
+                    </div>
                   </div>
 
-                  {/* TX link */}
-                  {txDigest && (
-                    <a href={`${EXPLORER_BASE}/txblock/${txDigest}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="flex items-center justify-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors py-2">
-                      <span className="material-symbols-outlined text-sm leading-none">open_in_new</span>
-                      View on Explorer · {txDigest.slice(0, 8)}…
-                    </a>
+                  <div
+                    className="w-full rounded-xl p-3"
+                    style={{
+                      backgroundColor: "rgba(13,242,128,0.05)",
+                      border: "1px solid rgba(13,242,128,0.15)",
+                    }}
+                  >
+                    {chartPoints ? (
+                      <svg viewBox="0 0 100 100" className="w-full h-44" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="price-fill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#0df280" stopOpacity="0.4" />
+                            <stop offset="100%" stopColor="#0df280" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <polyline
+                          points={`${chartPoints} 100,100 0,100`}
+                          fill="url(#price-fill)"
+                          stroke="none"
+                        />
+                        <polyline
+                          points={chartPoints}
+                          fill="none"
+                          stroke="#0df280"
+                          strokeWidth="1.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    ) : (
+                      <div className="h-44 flex items-center justify-center text-sm text-slate-500">
+                        {candlesQuery.isLoading || quoteQuery.isLoading
+                          ? "Loading live chart..."
+                          : "No chart data from Finnhub yet."}
+                      </div>
+                    )}
+                  </div>
+
+                  {usingQuoteFallback && (
+                    <p className="text-xs text-amber-300 font-bold mt-3">
+                      Candle API restricted for this symbol/key. Running live quote mode (2s ticks).
+                    </p>
                   )}
 
-                  {/* Demo badge */}
-                  {isDemo && (
-                    <p className="text-center text-[10px] text-slate-600 font-bold uppercase tracking-widest">
-                      Demo — no transaction submitted
+                  {quoteQuery.isError && (
+                    <p className="text-xs text-red-400 font-bold mt-3">
+                      Quote error:{" "}
+                      {quoteQuery.error instanceof Error ? quoteQuery.error.message : "Unknown"}
+                    </p>
+                  )}
+                  {candlesQuery.isError && !usingQuoteFallback && (
+                    <p className="text-xs text-red-400 font-bold mt-2">
+                      Candle error:{" "}
+                      {candlesQuery.error instanceof Error ? candlesQuery.error.message : "Unknown"}
                     </p>
                   )}
                 </div>
-              ) : (
-                <>
-                  {/* UP / DOWN buttons */}
+
+                <div
+                  id="join-tournament"
+                  className="glass-panel rounded-2xl p-6 scroll-mt-28 transition-all duration-700"
+                  style={
+                    isJoinHighlighted
+                      ? {
+                          border: "1px solid rgba(13,242,128,0.85)",
+                          boxShadow:
+                            "0 0 0 2px rgba(13,242,128,0.28), 0 0 28px rgba(13,242,128,0.3)",
+                          backgroundColor: "rgba(13,242,128,0.06)",
+                        }
+                      : undefined
+                  }
+                >
+                  <h3 className="text-sm font-black uppercase tracking-widest mb-4">
+                    Join Tournament Round
+                  </h3>
+
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <button
-                      onClick={() => { setPick("UP"); resetJoin(); }}
-                      className="py-5 rounded-xl flex flex-col items-center gap-1 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                      style={{
-                        backgroundColor: pick === "UP" ? "rgba(13,242,128,0.2)" : "rgba(13,242,128,0.08)",
-                        border: pick === "UP" ? "2px solid #0df280" : "2px solid rgba(13,242,128,0.2)",
-                        boxShadow: pick === "UP" ? "0 0 20px rgba(13,242,128,0.3)" : "none",
-                      }}>
-                      <span className="material-symbols-outlined text-4xl" style={{ color: "#0df280" }}>trending_up</span>
-                      <span className="font-black uppercase text-sm" style={{ color: "#0df280" }}>Predict UP</span>
-                      <span className="text-xs text-slate-500">Price will rise</span>
+                      onClick={() => {
+                        setSelectedDirection(DIRECTION.UP);
+                        resetJoin();
+                        setSubmitError(null);
+                      }}
+                      className="py-4 rounded-xl font-black text-sm uppercase transition-all"
+                      style={
+                        selectedDirection === DIRECTION.UP
+                          ? {
+                              backgroundColor: "rgba(13,242,128,0.2)",
+                              border: "2px solid #0df280",
+                              color: "#0df280",
+                            }
+                          : {
+                              backgroundColor: "rgba(13,242,128,0.07)",
+                              border: "2px solid rgba(13,242,128,0.2)",
+                              color: "#0df280",
+                            }
+                      }
+                    >
+                      Predict UP
                     </button>
                     <button
-                      onClick={() => { setPick("DOWN"); resetJoin(); }}
-                      className="py-5 rounded-xl flex flex-col items-center gap-1 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                      style={{
-                        backgroundColor: pick === "DOWN" ? "rgba(255,77,77,0.2)" : "rgba(255,77,77,0.08)",
-                        border: pick === "DOWN" ? "2px solid #ff4d4d" : "2px solid rgba(255,77,77,0.2)",
-                        boxShadow: pick === "DOWN" ? "0 0 20px rgba(255,77,77,0.3)" : "none",
-                      }}>
-                      <span className="material-symbols-outlined text-4xl" style={{ color: "#ff4d4d" }}>trending_down</span>
-                      <span className="font-black uppercase text-sm" style={{ color: "#ff4d4d" }}>Predict DOWN</span>
-                      <span className="text-xs text-slate-500">Price will fall</span>
+                      onClick={() => {
+                        setSelectedDirection(DIRECTION.DOWN);
+                        resetJoin();
+                        setSubmitError(null);
+                      }}
+                      className="py-4 rounded-xl font-black text-sm uppercase transition-all"
+                      style={
+                        selectedDirection === DIRECTION.DOWN
+                          ? {
+                              backgroundColor: "rgba(239,68,68,0.2)",
+                              border: "2px solid #ef4444",
+                              color: "#ef4444",
+                            }
+                          : {
+                              backgroundColor: "rgba(239,68,68,0.07)",
+                              border: "2px solid rgba(239,68,68,0.2)",
+                              color: "#ef4444",
+                            }
+                      }
+                    >
+                      Predict DOWN
                     </button>
                   </div>
 
-                  {/* Entry fee info */}
-                  <div className="rounded-xl p-4 mb-4"
-                    style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Entry Stake</span>
-                      <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs leading-none">lock</span>
-                        Principal returned after tournament
+                  <div className="rounded-xl p-4 mb-4" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">Entry Fee</span>
+                      <span className="font-black">{formatUSDT(entryFeeRaw)} USDT</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm mt-2">
+                      <span className="text-slate-400">Wallet Balance</span>
+                      <span
+                        className="font-black"
+                        style={{ color: hasEnoughBalance ? "#0df280" : "#ef4444" }}
+                      >
+                        {balance ? `${balance.formatted} USDT` : account ? "..." : "-"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!account ? (
+                    <div className="flex justify-center py-2">
+                      <ConnectButton />
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleSubmitPrediction}
+                      disabled={!canSubmit}
+                      className="w-full py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        backgroundColor: "#0df280",
+                        color: "#0a0a0a",
+                      }}
+                    >
+                      {isJoinPending
+                        ? "Submitting transaction..."
+                        : liveStatus !== "live"
+                          ? "Tournament not live"
+                          : !hasEnoughBalance
+                            ? "Insufficient USDT"
+                            : selectedDirection
+                              ? `Join + Pay ${formatUSDT(entryFeeRaw)} USDT (${formatDirection(selectedDirection)})`
+                              : "Choose direction"}
+                    </button>
+                  )}
+
+                  {(submitError || isJoinError) && (
+                    <p className="text-xs text-red-400 font-bold mt-3">
+                      {submitError ??
+                        (joinError instanceof Error
+                          ? joinError.message
+                          : "Failed to submit prediction.")}
+                    </p>
+                  )}
+
+                  {liveStatus !== "live" && nowMs >= (tournament?.startTimeMs ?? 0) && (
+                    <p className="text-xs text-amber-300 font-bold mt-2">
+                      Round not active on-chain yet. Admin must run start round first.
+                    </p>
+                  )}
+
+                  {isJoinSuccess && txDigest && (
+                    <a
+                      href={`${EXPLORER_BASE}/txblock/${txDigest}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-sky-300 hover:text-sky-200"
+                    >
+                      <span className="material-symbols-outlined text-sm leading-none">
+                        open_in_new
+                      </span>
+                      Transaction: {txDigest.slice(0, 12)}...
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              <div className="xl:col-span-1 flex flex-col gap-6">
+                <div className="glass-panel rounded-2xl p-5">
+                  <h3 className="text-sm font-black uppercase tracking-widest mb-4">
+                    Round Stats
+                  </h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Start</span>
+                      <span className="font-bold text-right">{formatDateTime(tournament.startTimeMs)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">End</span>
+                      <span className="font-bold text-right">{formatDateTime(tournament.endTimeMs)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Up Votes</span>
+                      <span className="font-black" style={{ color: "#22c55e" }}>
+                        {tournament.upCount}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-2xl font-black">
-                        {formatUSDT(entryFeeRaw)} <span className="text-slate-400 text-lg">USDT</span>
+                      <span className="text-slate-400">Down Votes</span>
+                      <span className="font-black" style={{ color: "#ef4444" }}>
+                        {tournament.downCount}
                       </span>
-                      {account && !isDemo && (
-                        <span className="text-xs font-bold" style={{ color: hasEnoughBalance ? "#0df280" : "#ff4d4d" }}>
-                          {hasEnoughBalance ? "✓ Sufficient balance" : "Insufficient balance"}
-                        </span>
-                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Yield Pool</span>
+                      <span className="font-black" style={{ color: "#3b82f6" }}>
+                        {formatUSDT(tournament.yieldPoolRaw)} USDT
+                      </span>
                     </div>
                   </div>
-
-                  {/* Error */}
-                  {joinError && (
-                    <div className="rounded-xl p-3 mb-4 text-xs font-bold"
-                      style={{ backgroundColor: "rgba(255,77,77,0.1)", border: "1px solid rgba(255,77,77,0.25)", color: "#ff4d4d" }}>
-                      <span className="material-symbols-outlined text-sm leading-none mr-1">error</span>
-                      {joinErr instanceof Error ? joinErr.message : "Transaction failed. Please try again."}
-                    </div>
-                  )}
-
-                  {/* Confirm button */}
-                  <button
-                    onClick={handleSubmit}
-                    disabled={!pick || isLoading || (!isDemo && !!account && !hasEnoughBalance)}
-                    className="w-full py-4 rounded-xl font-black text-base uppercase tracking-widest transition-all disabled:cursor-not-allowed"
-                    style={pick && (isDemo || !account || hasEnoughBalance)
-                      ? { backgroundColor: pick === "UP" ? "#0df280" : "#ff4d4d", color: "#0a0a0a",
-                          boxShadow: `0 0 24px ${pick === "UP" ? "rgba(13,242,128,0.4)" : "rgba(255,77,77,0.4)"}` }
-                      : { backgroundColor: "rgba(255,255,255,0.06)", color: "#475569" }}>
-                    {isLoading ? "Submitting…"
-                      : !account ? "Connect Wallet to Play"
-                      : !isDemo && !hasEnoughBalance ? "Insufficient USDT"
-                      : pick ? `Confirm Predict ${pick}${isDemo ? " (Demo)" : ""}`
-                      : "Select a Direction"}
-                  </button>
-
-                  {/* No wallet nudge */}
-                  {!account && (
-                    <div className="mt-3 text-center">
-                      <ConnectButton />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* ── Round History ──────────────────────────────────────── */}
-            <div className="glass-panel rounded-2xl p-6">
-              <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg" style={{ color: "#0df280" }}>history</span>
-                Your Round History
-              </h3>
-              {ROUND_HISTORY.length === 0 ? (
-                <p className="text-slate-600 text-sm text-center py-4">No rounds completed yet</p>
-              ) : (
-                <div className="space-y-3">
-                  {ROUND_HISTORY.map((r) => (
-                    <div key={r.round} className="flex items-center justify-between rounded-xl px-4 py-3"
-                      style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-black"
-                          style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
-                          {r.round}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-300">
-                            {r.lockedPrice} → {r.closedPrice}
-                          </p>
-                          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">
-                            Closed {r.result} · You picked {r.myPick}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded"
-                          style={r.outcome === "win"
-                            ? { backgroundColor: "#0df280", color: "#0a0a0a" }
-                            : { backgroundColor: "#334155", color: "#94a3b8" }}>
-                          {r.outcome === "win" ? "WIN" : "LOSS"}
-                        </span>
-                        <span className="font-black text-sm" style={{ color: r.outcome === "win" ? "#0df280" : "#475569" }}>
-                          +{r.pts} pts
-                        </span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
-              )}
-              <p className="text-xs text-slate-600 font-bold uppercase tracking-widest mt-4 text-center">
-                {t.totalRounds - ROUND_HISTORY.length} rounds remaining in this tournament
-              </p>
-            </div>
-          </div>
 
-          {/* ── Right: Tournament Leaderboard (2 cols) ──────────────── */}
-          <div className="lg:col-span-2">
-            <div className="glass-panel rounded-2xl p-6 sticky top-24">
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                  <span className="material-symbols-outlined text-lg" style={{ color: "#f59e0b" }}>emoji_events</span>
-                  Tournament Leaderboard
-                </h3>
-                <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: "#0df280" }} />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#0df280" }} />
-                  </span>
-                  Live
-                </span>
-              </div>
-
-              {/* Prize distribution */}
-              <div className="grid grid-cols-3 gap-2 mb-5">
-                {[
-                  { pos: "1st", share: "50%", color: "#f59e0b", icon: "looks_one" },
-                  { pos: "2nd", share: "30%", color: "#94a3b8", icon: "looks_two" },
-                  { pos: "3rd", share: "20%", color: "#cd7f32", icon: "looks_3" },
-                ].map((p) => (
-                  <div key={p.pos} className="rounded-lg p-2 text-center"
-                    style={{ backgroundColor: `${p.color}12`, border: `1px solid ${p.color}25` }}>
-                    <span className="material-symbols-outlined text-xl" style={{ color: p.color }}>{p.icon}</span>
-                    <p className="text-xs font-black" style={{ color: p.color }}>{p.share}</p>
-                    <p className="text-[10px] text-slate-600 font-bold uppercase">{p.pos}</p>
+                <div className="glass-panel rounded-2xl p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest">Recent Joins</h3>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                      Round {tournament.roundNumber}
+                    </span>
                   </div>
-                ))}
-              </div>
 
-              {/* Rankings */}
-              <div className="space-y-1">
-                {LEADERBOARD.map((p) => (
-                  <div key={p.rank}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors"
-                    style={{
-                      backgroundColor: p.isMe ? "rgba(13,242,128,0.08)"
-                        : p.rank <= 3 ? "rgba(255,255,255,0.04)" : "transparent",
-                      border: p.isMe ? "1px solid rgba(13,242,128,0.2)" : "1px solid transparent",
-                    }}>
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shrink-0"
-                      style={{
-                        backgroundColor: p.rank === 1 ? "rgba(245,158,11,0.2)"
-                          : p.rank === 2 ? "rgba(148,163,184,0.2)"
-                          : p.rank === 3 ? "rgba(205,127,50,0.2)"
-                          : "rgba(255,255,255,0.06)",
-                        color: p.rank === 1 ? "#f59e0b" : p.rank === 2 ? "#94a3b8" : p.rank === 3 ? "#cd7f32" : "#64748b",
-                      }}>
-                      {p.rank}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold truncate" style={{ color: p.isMe ? "#0df280" : "inherit" }}>
-                        {p.addr}
-                        {p.isMe && (
-                          <span className="ml-1 text-[10px] px-1 py-0.5 rounded font-black"
-                            style={{ backgroundColor: "rgba(13,242,128,0.2)", color: "#0df280" }}>YOU</span>
-                        )}
-                      </p>
-                      <p className="text-[10px] text-slate-600 font-bold">
-                        {p.wins}W / {p.rounds - p.wins}L
-                        {p.streak > 0 && <span style={{ color: "#f59e0b" }}> · 🔥{p.streak}</span>}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-black" style={{ color: p.rank <= 3 ? "#f59e0b" : "inherit" }}>{p.pts}</p>
-                      <p className="text-[10px] text-slate-600 font-bold">pts</p>
-                    </div>
+                  {joinEventsQuery.isLoading && (
+                    <p className="text-sm text-slate-400">Loading join events...</p>
+                  )}
+
+                  {!joinEventsQuery.isLoading && joinEvents.length === 0 && (
+                    <p className="text-sm text-slate-400">No join transactions yet.</p>
+                  )}
+
+                  <div className="space-y-2">
+                    {joinEvents.map((event) => (
+                      <div
+                        key={`${event.txDigest}-${event.player}`}
+                        className="rounded-xl px-3 py-2 text-xs"
+                        style={{ backgroundColor: "rgba(255,255,255,0.04)" }}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-bold text-slate-200">
+                            {shortenAddress(event.player)}
+                          </span>
+                          <span
+                            className="font-black"
+                            style={{
+                              color: event.direction === DIRECTION.UP ? "#22c55e" : "#ef4444",
+                            }}
+                          >
+                            {formatDirection(event.direction)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-slate-500">
+                          <span>{formatUSDT(event.amountRaw)} USDT</span>
+                          <a
+                            href={`${EXPLORER_BASE}/txblock/${event.txDigest}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="hover:text-white"
+                          >
+                            {event.txDigest.slice(0, 8)}...
+                          </a>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
-
-              <p className="text-[10px] text-slate-600 font-bold uppercase tracking-widest text-center mt-4">
-                Updated after each round
-              </p>
             </div>
-          </div>
-        </div>
-
-        {/* ── How it works ──────────────────────────────────────────── */}
-        <div className="glass-panel rounded-2xl p-6">
-          <h3 className="text-sm font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-            <span className="material-symbols-outlined text-lg" style={{ color: "#3b82f6" }}>info</span>
-            How This Tournament Works
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {[
-              { icon: "login",          color: "#0df280", title: "1. Pay Entry Fee",    desc: `Stake ${formatUSDT(entryFeeRaw)} USDT once to enter. Your principal is always returned.` },
-              { icon: "query_stats",    color: "#3b82f6", title: `2. Predict ${t.totalRounds}× Rounds`, desc: `Each round: pick UP or DOWN on ${t.pair} within ${t.roundDuration}. You play all ${t.totalRounds} rounds.` },
-              { icon: "military_tech",  color: "#f59e0b", title: "3. Earn Points",      desc: "Correct prediction = points. Wrong prediction = 0 pts. Streak bonus applies." },
-              { icon: "emoji_events",   color: "#a855f7", title: "4. Win the Yield",    desc: "Top 3 by total points split the prize pool. Everyone gets their principal back — no loss." },
-            ].map((s) => (
-              <div key={s.title} className="rounded-xl p-4" style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
-                <span className="material-symbols-outlined text-2xl block mb-2" style={{ color: s.color }}>{s.icon}</span>
-                <p className="font-black text-sm uppercase italic mb-1">{s.title}</p>
-                <p className="text-xs text-slate-500 leading-relaxed">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
+          </>
+        )}
       </main>
     </div>
   );

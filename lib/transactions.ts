@@ -5,13 +5,13 @@ import { PACKAGE_ID, OBJECT_IDS } from "./constants";
  * Claim 100 USDT from the public faucet.
  * The minted coin is transferred to `senderAddress`.
  */
-export function buildClaimFaucetTx(senderAddress: string): Transaction {
+export function buildClaimFaucetTx(): Transaction {
   const tx = new Transaction();
-  const [coin] = tx.moveCall({
-    target: `${PACKAGE_ID}::usdt::claim_faucet`,
+  tx.setGasBudget(10_000_000);
+  tx.moveCall({
+    target: `${PACKAGE_ID}::ousdt::claim_faucet`,
     arguments: [tx.object(OBJECT_IDS.FAUCET)],
   });
-  tx.transferObjects([coin], tx.pure.address(senderAddress));
   return tx;
 }
 
@@ -34,6 +34,7 @@ export function buildJoinGameTx(
   entryFeeRaw: number,
 ): Transaction {
   const tx = new Transaction();
+  tx.setGasBudget(10_000_000);
   // Split exact entry fee from the user's USDT coin
   const [payment] = tx.splitCoins(tx.object(usdtCoinObjectId), [
     tx.pure.u64(entryFeeRaw),
@@ -59,17 +60,94 @@ export function buildJoinGameTx(
 export function buildClaimRewardTx(
   roundId: string,
   registryId: string,
-  playerAddress: string,
 ): Transaction {
   const tx = new Transaction();
-  const [reward] = tx.moveCall({
+  tx.setGasBudget(10_000_000);
+  tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::claim_rewards`,
     arguments: [
       tx.object(roundId),
       tx.object(registryId),
-      tx.pure.address(playerAddress),
     ],
   });
-  tx.transferObjects([reward], tx.pure.address(playerAddress));
+  return tx;
+}
+
+export interface CreateTournamentParams {
+  roundId: number;
+  seasonId: number;
+  coinSymbol: string;
+  startTimeMs: number;
+  endTimeMs: number;
+  entryFeeRaw: number;
+  earlyWindowMinutes: number;
+}
+
+export interface StartRoundParams {
+  roundId: string;
+  priceStartRaw: number;
+}
+
+function toAsciiBytes(input: string): number[] {
+  return Array.from(input).map((char) => char.charCodeAt(0));
+}
+
+/**
+ * Admin-only flow:
+ * 1) create game session (round + prediction registry + game session)
+ * 2) create leaderboard
+ * 3) share leaderboard
+ */
+export function buildCreateTournamentTx(
+  params: CreateTournamentParams,
+): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudget(30_000_000);
+
+  tx.moveCall({
+    target: `${PACKAGE_ID}::game_controller::create_game_session`,
+    arguments: [
+      tx.object(OBJECT_IDS.ADMIN_CAP),
+      tx.pure.u64(params.roundId),
+      tx.pure.u64(params.seasonId),
+      tx.pure.vector("u8", toAsciiBytes(params.coinSymbol.toUpperCase())),
+      tx.pure.u64(params.startTimeMs),
+      tx.pure.u64(params.endTimeMs),
+      tx.pure.u64(params.entryFeeRaw),
+      tx.pure.u64(params.earlyWindowMinutes),
+    ],
+  });
+
+  const leaderboard = tx.moveCall({
+    target: `${PACKAGE_ID}::leaderboard::create_leaderboard`,
+    arguments: [tx.pure.u64(params.seasonId)],
+  });
+
+  tx.moveCall({
+    target: `${PACKAGE_ID}::leaderboard::share_leaderboard`,
+    arguments: [leaderboard],
+  });
+
+  return tx;
+}
+
+/**
+ * Admin-only flow:
+ * Start a created round so users can join and submit predictions.
+ */
+export function buildStartRoundTx(params: StartRoundParams): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudget(10_000_000);
+
+  tx.moveCall({
+    target: `${PACKAGE_ID}::game_controller::start_game`,
+    arguments: [
+      tx.object(OBJECT_IDS.ADMIN_CAP),
+      tx.object(params.roundId),
+      tx.pure.u64(params.priceStartRaw),
+      tx.object(OBJECT_IDS.CLOCK),
+    ],
+  });
+
   return tx;
 }

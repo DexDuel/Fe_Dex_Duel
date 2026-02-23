@@ -1,24 +1,26 @@
 export const PACKAGE_ID =
-  "0x816b6cd7533bef4e1f96f0001f982f26549690d3bdc6fcda8aed0be78a9ac004";
+  "0x24a6e095d2ebbfcfc4491f93e1bbb68ebef3e16740e90dfcc290d2feefe6ce6b";
 
 export const OBJECT_IDS = {
-  FAUCET: "0x3974604ec4eb83495998712f86263d4c3ecc97a6003d8d9590f5d9b225078a68",
+  FAUCET: "0x27329696d1b98a0d8890e8c67871d3ff5946a132ceae20ff3a1d47fe7496215d",
   ADMIN_CAP:
-    "0x43c7353865813dd36eb6c763d1053cec696d8e64b04d0b47083fea353e48adc7",
+    "0x175c1c51a4ec492dfedb6a58fada90bdd8bcc9de5dcfc2b13b354d2e08bf2f57",
   TREASURY:
-    "0x579187571046c055fb3ad7205331e9458ed799d198d416f20c737b14f709a614",
+    "0xd361feb2e5a426a6871983b9469da924c3528a617dd21e4217e11aa8b4042d7c",
   CLOCK: "0x0000000000000000000000000000000000000000000000000000000000000006",
 };
 
 export const MODULES = {
-  USDT: `${PACKAGE_ID}::usdt`,
+  OUSDT: `${PACKAGE_ID}::ousdt`,
   GAME_ROUND: `${PACKAGE_ID}::game_round`,
   PREDICTION: `${PACKAGE_ID}::prediction`,
   LEADERBOARD: `${PACKAGE_ID}::leaderboard`,
   GAME_CONTROLLER: `${PACKAGE_ID}::game_controller`,
 } as const;
 
-export const USDT_TYPE = `${PACKAGE_ID}::usdt::USDT`;
+export const OUSDT_TYPE = `${PACKAGE_ID}::ousdt::OUSDT`;
+/** @deprecated use OUSDT_TYPE */
+export const USDT_TYPE = OUSDT_TYPE;
 export const FAUCET_AMOUNT_USDT = 100;
 export const FAUCET_AMOUNT_RAW = 100_000_000; // 6 decimals
 export const USDT_DECIMALS = 6;
@@ -49,40 +51,55 @@ export const REWARD_DISTRIBUTION = {
 } as const;
 
 export const NETWORK = {
-  TESTNET_RPC: "https://rpc.testnet.onechain.io",
+  TESTNET_RPC: "https://rpc-testnet.onelabs.cc:443",
   TESTNET_CHAIN_ID: "one-testnet",
 };
+
+const DEFAULT_CREATE_TOURNAMENT_ADMINS = [
+  // Deployer/admin wallet from latest publish log (DexDuel_SC/p.txt).
+  "0x75db71a5b41d5b2600d5b4c1fb1dcf217c6f34979a51e22e714d9d96c9e518a8",
+] as const;
+
+function normalizeAddress(addr: string): string {
+  return addr.trim().toLowerCase();
+}
+
+function loadCreateTournamentAdmins(): string[] {
+  const raw = process.env.NEXT_PUBLIC_CREATE_TOURNAMENT_ADMINS;
+  if (!raw) return [...DEFAULT_CREATE_TOURNAMENT_ADMINS];
+
+  const parsed = raw
+    .split(",")
+    .map((addr) => normalizeAddress(addr))
+    .filter((addr) => addr.startsWith("0x") && addr.length > 2);
+
+  return parsed.length > 0 ? parsed : [...DEFAULT_CREATE_TOURNAMENT_ADMINS];
+}
+
+export const CREATE_TOURNAMENT_ADMINS = loadCreateTournamentAdmins();
+
+export function isCreateTournamentAdmin(address?: string | null): boolean {
+  if (!address) return false;
+  return CREATE_TOURNAMENT_ADMINS.includes(normalizeAddress(address));
+}
 
 export const EXPLORER_BASE = "https://explorer.onechain.io";
 
 /**
  * Active game session configs — populate after admin deploys sessions on-chain.
- * Each entry maps directly to on-chain shared objects created by create_game_session().
  */
 export interface GameSessionConfig {
-  sessionId: string;      // GameSession shared object ID
-  roundId: string;        // Round shared object ID
-  registryId: string;     // PredictionRegistry shared object ID
-  leaderboardId: string;  // Leaderboard shared object ID for the season
-  coinSymbol: string;     // e.g. "BTC"
-  entryFeeRaw: number;    // e.g. 100_000_000 (= 100 USDT, 6 decimals)
-  startTime: number;      // unix milliseconds
-  endTime: number;        // unix milliseconds
+  sessionId: string;
+  roundId: string;
+  registryId: string;
+  leaderboardId: string;
+  coinSymbol: string;
+  entryFeeRaw: number;
+  startTime: number;
+  endTime: number;
 }
 
-export const ACTIVE_GAME_SESSIONS: GameSessionConfig[] = [
-  // Example (fill in real IDs from explorer after admin creates sessions):
-  // {
-  //   sessionId:    "0x...",
-  //   roundId:      "0x...",
-  //   registryId:   "0x...",
-  //   leaderboardId:"0x...",
-  //   coinSymbol:   "BTC",
-  //   entryFeeRaw:  100_000_000,
-  //   startTime:    Date.now(),
-  //   endTime:      Date.now() + 5 * 60 * 1000,
-  // },
-];
+export const ACTIVE_GAME_SESSIONS: GameSessionConfig[] = [];
 
 export function formatUSDT(raw: number | bigint): string {
   const n = typeof raw === "bigint" ? Number(raw) : raw;

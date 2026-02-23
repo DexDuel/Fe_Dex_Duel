@@ -2,34 +2,32 @@
 
 import { useSuiClient, useCurrentAccount, useCurrentWallet } from "@onelabs/dapp-kit";
 import { useState } from "react";
-import { buildClaimRewardTx } from "@/lib/transactions";
+import { buildCreateTournamentTx, type CreateTournamentParams } from "@/lib/transactions";
 import { signTransactionForExecution } from "@/lib/walletFeatures";
 
-/**
- * Hook to claim principal + yield reward after a round is settled.
- * Pre-builds BCS bytes to bypass OneWallet's JSON→BCS re-encoding.
- */
-export function useClaimReward() {
+export function useCreateTournament() {
   const client = useSuiClient();
   const account = useCurrentAccount();
   const { currentWallet } = useCurrentWallet();
+
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  async function claimReward(roundId: string, registryId: string) {
+  async function createTournament(params: CreateTournamentParams) {
     if (!currentWallet || !account) throw new Error("Wallet not connected");
+
     setIsPending(true);
     setIsSuccess(false);
     setIsError(false);
     setError(null);
+
     try {
-      const tx = buildClaimRewardTx(roundId, registryId);
+      const tx = buildCreateTournamentTx(params);
       tx.setSender(account.address);
 
       const bytes = await tx.build({ client });
-
       const { transactionBlockBytes, signature } = await signTransactionForExecution(
         currentWallet,
         account,
@@ -40,7 +38,7 @@ export function useClaimReward() {
       const result = await client.executeTransactionBlock({
         transactionBlock: transactionBlockBytes,
         signature,
-        options: { showRawEffects: true },
+        options: { showObjectChanges: true, showRawEffects: true },
       });
 
       setIsSuccess(true);
@@ -54,5 +52,6 @@ export function useClaimReward() {
     }
   }
 
-  return { claimReward, isPending, isSuccess, isError, error };
+  return { createTournament, isPending, isSuccess, isError, error };
 }
+

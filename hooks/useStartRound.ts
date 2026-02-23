@@ -1,35 +1,45 @@
 "use client";
 
-import { useSuiClient, useCurrentAccount, useCurrentWallet } from "@onelabs/dapp-kit";
 import { useState } from "react";
-import { buildClaimRewardTx } from "@/lib/transactions";
+import { useCurrentAccount, useCurrentWallet, useSuiClient } from "@onelabs/dapp-kit";
+import { buildStartRoundTx } from "@/lib/transactions";
 import { signTransactionForExecution } from "@/lib/walletFeatures";
 
-/**
- * Hook to claim principal + yield reward after a round is settled.
- * Pre-builds BCS bytes to bypass OneWallet's JSON→BCS re-encoding.
- */
-export function useClaimReward() {
+export interface StartRoundParams {
+  roundId: string;
+  priceStartRaw: number;
+}
+
+export function useStartRound() {
   const client = useSuiClient();
   const account = useCurrentAccount();
   const { currentWallet } = useCurrentWallet();
+
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  async function claimReward(roundId: string, registryId: string) {
+  function reset() {
+    setIsPending(false);
+    setIsSuccess(false);
+    setIsError(false);
+    setError(null);
+  }
+
+  async function startRound(params: StartRoundParams) {
     if (!currentWallet || !account) throw new Error("Wallet not connected");
+
     setIsPending(true);
     setIsSuccess(false);
     setIsError(false);
     setError(null);
+
     try {
-      const tx = buildClaimRewardTx(roundId, registryId);
+      const tx = buildStartRoundTx(params);
       tx.setSender(account.address);
 
       const bytes = await tx.build({ client });
-
       const { transactionBlockBytes, signature } = await signTransactionForExecution(
         currentWallet,
         account,
@@ -40,19 +50,19 @@ export function useClaimReward() {
       const result = await client.executeTransactionBlock({
         transactionBlock: transactionBlockBytes,
         signature,
-        options: { showRawEffects: true },
+        options: { showObjectChanges: true, showRawEffects: true },
       });
 
       setIsSuccess(true);
       return result;
-    } catch (e) {
+    } catch (executionError) {
       setIsError(true);
-      setError(e as Error);
-      throw e;
+      setError(executionError as Error);
+      throw executionError;
     } finally {
       setIsPending(false);
     }
   }
 
-  return { claimReward, isPending, isSuccess, isError, error };
+  return { startRound, isPending, isSuccess, isError, error, reset };
 }
