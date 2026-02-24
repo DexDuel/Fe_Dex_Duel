@@ -4,6 +4,7 @@ import "./globals.css";
 import "@onelabs/dapp-kit/dist/index.css";
 import Providers from "./providers";
 import Navbar from "@/components/Navbar";
+import WebGLWrapper from "@/components/webgl/WebGLWrapper";
 
 export const metadata: Metadata = {
   title: "GameFi Prediction Arena | Lossless Crypto Battles",
@@ -32,6 +33,8 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning>
         <Providers>
+          {/* Fixed 3D background — visible through all pages */}
+          <WebGLWrapper />
           <Navbar />
           {children}
         </Providers>

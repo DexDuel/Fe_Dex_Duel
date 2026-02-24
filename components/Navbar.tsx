@@ -28,20 +28,20 @@ export default function Navbar() {
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel bg-[#0a0a0a]/80 backdrop-blur-xl">
+    <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-xl" style={{ backgroundColor: "rgba(2,8,23,0.88)", borderBottom: "1px solid rgba(59,130,246,0.12)" }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <span className="material-symbols-outlined text-3xl transition-transform group-hover:rotate-12" style={{ color: "#0df280" }}>
+            <span className="material-symbols-outlined text-3xl transition-transform group-hover:rotate-12" style={{ color: "#3b82f6" }}>
               swords
             </span>
             <div className="flex flex-col leading-none">
               <h1 className="text-sm font-black tracking-tighter uppercase italic text-white">
-                GameFi
+                Dex
               </h1>
-              <h1 className="text-sm font-black tracking-tighter uppercase italic" style={{ color: "#0df280" }}>
-                Arena
+              <h1 className="text-sm font-black tracking-tighter uppercase italic" style={{ color: "#3b82f6" }}>
+                Duel
               </h1>
             </div>
           </Link>
@@ -55,12 +55,12 @@ export default function Navbar() {
                   key={href}
                   href={href}
                   className={`text-[11px] font-black uppercase tracking-widest transition-all relative py-1 ${
-                    active ? "text-[#0df280]" : "text-slate-400 hover:text-white"
+                    active ? "text-[#3b82f6]" : "text-slate-400 hover:text-white"
                   }`}
                 >
                   {label}
                   {active && (
-                    <span className="absolute bottom-[-2px] left-0 right-0 h-[2px] bg-[#0df280] rounded-full" />
+                    <span className="absolute bottom-[-2px] left-0 right-0 h-[2px] rounded-full" style={{ backgroundColor: "#3b82f6" }} />
                   )}
                 </Link>
               );
@@ -79,7 +79,7 @@ export default function Navbar() {
                   border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
-                <span className="material-symbols-outlined text-sm leading-none" style={{ color: "#0df280" }}>
+                <span className="material-symbols-outlined text-sm leading-none" style={{ color: "#3b82f6" }}>
                   toll
                 </span>
                 <span className="text-slate-300">
@@ -109,7 +109,7 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {mobileOpen && (
-        <div className="lg:hidden border-t border-white/10 bg-[#0a0a0a] px-4 py-4 space-y-4 animate-in slide-in-from-top duration-200">
+        <div className="lg:hidden px-4 py-4 space-y-4 animate-in slide-in-from-top duration-200" style={{ borderTop: "1px solid rgba(59,130,246,0.12)", backgroundColor: "rgba(2,8,23,0.97)" }}>
           <div className="flex flex-col gap-1">
             {navLinks.map(({ href, label }) => {
               const active = pathname === href || (href !== "/" && pathname.startsWith(href));
@@ -119,8 +119,8 @@ export default function Navbar() {
                   href={href}
                   onClick={() => setMobileOpen(false)}
                   className={`px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    active 
-                      ? "bg-[#0df280]/10 text-[#0df280] border border-[#0df280]/20" 
+                    active
+                      ? "text-[#3b82f6]"
                       : "text-slate-400 hover:bg-white/5"
                   }`}
                 >
@@ -134,7 +134,7 @@ export default function Navbar() {
             <div className="pt-4 border-t border-white/5 space-y-3">
               <div className="px-4 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500">
                 <span>Balance</span>
-                <span className="text-[#0df280]">
+                <span className="text-[#3b82f6]">
                   {balance ? `${balance.formatted} USDT` : "..."}
                 </span>
               </div>
