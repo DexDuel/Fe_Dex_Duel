@@ -126,7 +126,7 @@ export default function ProfilePage() {
               <div className="glass-panel rounded-xl p-4">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                    OUSDT Balance
+                    USDT Balance
                   </p>
                   <FaucetButton address={account.address} onSuccess={refetchBalance} />
                 </div>

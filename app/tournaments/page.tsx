@@ -33,6 +33,11 @@ const STATUS_STYLE = {
     color: "#94a3b8",
     bg: "rgba(148,163,184,0.15)",
   },
+  cancelled: {
+    label: "CANCELLED",
+    color: "#ef4444",
+    bg: "rgba(239,68,68,0.15)",
+  },
 } as const;
 
 function formatDateTime(timestampMs: number): string {
@@ -65,7 +70,9 @@ export default function TournamentsPage() {
     () => false
   );
 
-  const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming" | "ended">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "live" | "upcoming" | "ended" | "cancelled"
+  >("all");
   const [search, setSearch] = useState("");
   const [selectedDirectionBySession, setSelectedDirectionBySession] = useState<
     Record<string, PickDirection>
@@ -92,6 +99,7 @@ export default function TournamentsPage() {
     const live = tournaments.filter((t) => t.status === "live").length;
     const upcoming = tournaments.filter((t) => t.status === "upcoming").length;
     const ended = tournaments.filter((t) => t.status === "ended").length;
+    const cancelled = tournaments.filter((t) => t.status === "cancelled").length;
     const participants = tournaments.reduce((sum, t) => sum + t.totalParticipants, 0);
     const totalPoolRaw = tournaments.reduce((sum, t) => sum + t.totalPoolRaw, 0);
 
@@ -100,6 +108,7 @@ export default function TournamentsPage() {
       live,
       upcoming,
       ended,
+      cancelled,
       participants,
       totalPoolRaw,
     };
@@ -138,7 +147,7 @@ export default function TournamentsPage() {
     if (!balance?.largestCoin) {
       setJoinErrorBySession((previous) => ({
         ...previous,
-        [sessionId]: "No OUSDT coin found. Claim faucet first.",
+        [sessionId]: "No USDT coin found. Claim faucet first.",
       }));
       return;
     }
@@ -204,12 +213,13 @@ export default function TournamentsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-8">
           {[
             { label: "Total", value: stats.total, color: "#0df280" },
             { label: "Live", value: stats.live, color: "#22c55e" },
             { label: "Upcoming", value: stats.upcoming, color: "#f59e0b" },
             { label: "Ended", value: stats.ended, color: "#94a3b8" },
+            { label: "Cancelled", value: stats.cancelled, color: "#ef4444" },
             { label: "Pool", value: `${formatUSDT(stats.totalPoolRaw)} USDT`, color: "#3b82f6" },
           ].map((item) => (
             <div key={item.label} className="glass-panel rounded-xl p-3">
@@ -223,7 +233,7 @@ export default function TournamentsPage() {
 
         <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between mb-6">
           <div className="flex items-center gap-2 flex-wrap">
-            {(["all", "live", "upcoming", "ended"] as const).map((status) => (
+            {(["all", "live", "upcoming", "ended", "cancelled"] as const).map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -338,6 +348,7 @@ export default function TournamentsPage() {
                     <span>Ends in {formatTimeLeft(tournament.endTimeMs)}</span>
                   )}
                   {tournament.status === "ended" && <span>Tournament ended</span>}
+                  {tournament.status === "cancelled" && <span>Tournament cancelled</span>}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-xs font-bold">
@@ -422,6 +433,19 @@ export default function TournamentsPage() {
                     >
                       Join Tournament
                     </Link>
+                  ) : tournament.status === "cancelled" ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-60 cursor-not-allowed"
+                      style={{
+                        backgroundColor: "rgba(239,68,68,0.12)",
+                        color: "#fca5a5",
+                        border: "1px solid rgba(239,68,68,0.3)",
+                      }}
+                    >
+                      Cancelled
+                    </button>
                   ) : (
                     <button
                       type="button"

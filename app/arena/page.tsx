@@ -5,6 +5,7 @@ import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
 import { useCreateTournament } from "@/hooks/useCreateTournament";
 import { toFinnhubSymbol, useMarketSymbols } from "@/hooks/useMarketData";
 import { useOnChainTournaments } from "@/hooks/useOnChainTournaments";
+import { useCancelTournament } from "@/hooks/useCancelTournament";
 import { useStartRound } from "@/hooks/useStartRound";
 import { EXPLORER_BASE, isCreateTournamentAdmin } from "@/lib/constants";
 
@@ -13,6 +14,7 @@ type FormState = {
   seasonId: string;
   coinSymbol: string;
   entryFeeRaw: string;
+  minParticipants: string;
   startTime: string;
   endTime: string;
   earlyWindowMinutes: string;
@@ -34,6 +36,7 @@ function initialFormState(): FormState {
     seasonId: "1",
     coinSymbol: "BTC",
     entryFeeRaw: "100000000",
+    minParticipants: "1",
     startTime: toInputDate(start),
     endTime: toInputDate(end),
     earlyWindowMinutes: "5",
@@ -61,6 +64,8 @@ export default function CreateTournamentPage() {
   const [txDigest, setTxDigest] = useState<string | null>(null);
   const [startTxDigest, setStartTxDigest] = useState<string | null>(null);
   const [startMessage, setStartMessage] = useState<string | null>(null);
+  const [cancelTxDigest, setCancelTxDigest] = useState<string | null>(null);
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const { createTournament, isPending, isSuccess, isError, error } =
     useCreateTournament();
   const {
@@ -70,6 +75,13 @@ export default function CreateTournamentPage() {
     error: startError,
     reset: resetStartRound,
   } = useStartRound();
+  const {
+    cancelTournament,
+    isPending: isCancelPending,
+    isError: isCancelError,
+    error: cancelError,
+    reset: resetCancelTournament,
+  } = useCancelTournament();
 
   const symbolsQuery = useMarketSymbols("BINANCE", "USDT");
   const availableSymbols = useMemo(
@@ -94,6 +106,7 @@ export default function CreateTournamentPage() {
     const roundId = Number(form.roundId);
     const seasonId = Number(form.seasonId);
     const entryFeeRaw = Number(form.entryFeeRaw);
+    const minParticipants = Number(form.minParticipants);
     const earlyWindowMinutes = Number(form.earlyWindowMinutes);
     const startTimeMs = parseDateInput(form.startTime);
     const endTimeMs = parseDateInput(form.endTime);
@@ -107,6 +120,9 @@ export default function CreateTournamentPage() {
     if (!form.coinSymbol.trim()) return "Coin symbol is required";
     if (!Number.isFinite(entryFeeRaw) || entryFeeRaw <= 0) {
       return "Entry fee must be greater than 0";
+    }
+    if (!Number.isFinite(minParticipants) || minParticipants <= 0) {
+      return "Min participants must be greater than 0";
     }
     if (!Number.isFinite(earlyWindowMinutes) || earlyWindowMinutes < 0) {
       return "Early window must be 0 or greater";
@@ -130,6 +146,7 @@ export default function CreateTournamentPage() {
       startTimeMs: parseDateInput(form.startTime),
       endTimeMs: parseDateInput(form.endTime),
       entryFeeRaw: Number(form.entryFeeRaw),
+      minParticipants: Number(form.minParticipants),
       earlyWindowMinutes: Number(form.earlyWindowMinutes),
     });
 
@@ -182,6 +199,30 @@ export default function CreateTournamentPage() {
         executionError instanceof Error
           ? executionError.message
           : "Failed to start tournament round.",
+      );
+    }
+  }
+
+  async function handleCancelTournament(sessionId: string, roundObjectId: string) {
+    if (!account || !isAdmin) return;
+
+    resetCancelTournament();
+    setCancelMessage(null);
+    setCancelTxDigest(null);
+
+    try {
+      const result = await cancelTournament({
+        sessionId,
+        roundId: roundObjectId,
+      });
+      setCancelTxDigest(result.digest ?? null);
+      setCancelMessage("Tournament cancellation transaction submitted.");
+      await tournamentsQuery.refetch();
+    } catch (executionError) {
+      setCancelMessage(
+        executionError instanceof Error
+          ? executionError.message
+          : "Failed to cancel tournament.",
       );
     }
   }
@@ -303,6 +344,21 @@ export default function CreateTournamentPage() {
 
                 <label className="space-y-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Min Participants
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.minParticipants}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, minParticipants: event.target.value }))
+                    }
+                    className="w-full px-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 outline-none focus:border-white/30"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Start Time
                   </span>
                   <input
@@ -413,13 +469,13 @@ export default function CreateTournamentPage() {
                   Tournament Control Board
                 </h3>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
-                  Start round available
+                  Start + cancel available
                 </span>
               </div>
 
               <p className="text-xs text-slate-400 mb-5">
-                Use <span className="font-bold text-slate-300">Start</span> to run upcoming tournament.
-                Cancel is still disabled because Move module has no cancel entrypoint yet.
+                Use <span className="font-bold text-slate-300">Start</span> to run round and
+                <span className="font-bold text-slate-300"> Cancel</span> to cancel upcoming or low-participation rounds.
               </p>
 
               {startMessage && (
@@ -443,6 +499,37 @@ export default function CreateTournamentPage() {
                   {startTxDigest && (
                     <a
                       href={`${EXPLORER_BASE}/txblock/${startTxDigest}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-2 underline"
+                    >
+                      View tx
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {cancelMessage && (
+                <div
+                  className="rounded-xl p-3 text-xs font-bold mb-4"
+                  style={
+                    isCancelError
+                      ? {
+                          backgroundColor: "rgba(255,77,77,0.1)",
+                          color: "#ff9a9a",
+                          border: "1px solid rgba(255,77,77,0.2)",
+                        }
+                      : {
+                          backgroundColor: "rgba(13,242,128,0.15)",
+                          color: "#0df280",
+                          border: "1px solid rgba(13,242,128,0.25)",
+                        }
+                  }
+                >
+                  {cancelMessage}
+                  {cancelTxDigest && (
+                    <a
+                      href={`${EXPLORER_BASE}/txblock/${cancelTxDigest}`}
                       target="_blank"
                       rel="noreferrer"
                       className="ml-2 underline"
@@ -501,6 +588,11 @@ export default function CreateTournamentPage() {
                                         color: "#f59e0b",
                                         backgroundColor: "rgba(245,158,11,0.15)",
                                       }
+                                    : tournament.status === "cancelled"
+                                      ? {
+                                          color: "#ef4444",
+                                          backgroundColor: "rgba(239,68,68,0.15)",
+                                        }
                                     : {
                                         color: "#94a3b8",
                                         backgroundColor: "rgba(148,163,184,0.15)",
@@ -526,6 +618,7 @@ export default function CreateTournamentPage() {
                                 disabled={
                                   isStartPending ||
                                   tournament.status === "ended" ||
+                                  tournament.status === "cancelled" ||
                                   tournament.isActive
                                 }
                                 onClick={() =>
@@ -548,19 +641,38 @@ export default function CreateTournamentPage() {
                               >
                                 {isStartPending ? "Starting..." : tournament.isActive ? "Live" : "Start"}
                               </button>
-                              <button
-                                type="button"
-                                disabled
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider opacity-60 cursor-not-allowed"
-                                style={{
-                                  backgroundColor: "rgba(239,68,68,0.18)",
-                                  color: "#fca5a5",
-                                  border: "1px solid rgba(239,68,68,0.35)",
-                                }}
-                                title="Add cancel function in Move module first (e.g. game_controller::cancel_game_session)."
-                              >
-                                Cancel
-                              </button>
+                              {(() => {
+                                const canCancel =
+                                  tournament.status !== "ended" &&
+                                  tournament.status !== "cancelled" &&
+                                  (!tournament.isActive ||
+                                    tournament.totalParticipants < tournament.minParticipants);
+                                const cancelTitle = tournament.isActive
+                                  ? `Only rounds below min participants (${tournament.minParticipants}) can be cancelled.`
+                                  : "Run cancel_tournament admin transaction.";
+
+                                return (
+                                  <button
+                                    type="button"
+                                    disabled={isCancelPending || !canCancel}
+                                    onClick={() =>
+                                      handleCancelTournament(
+                                        tournament.sessionId,
+                                        tournament.roundObjectId,
+                                      )
+                                    }
+                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-60 disabled:cursor-not-allowed"
+                                    style={{
+                                      backgroundColor: "rgba(239,68,68,0.18)",
+                                      color: "#fca5a5",
+                                      border: "1px solid rgba(239,68,68,0.35)",
+                                    }}
+                                    title={cancelTitle}
+                                  >
+                                    {isCancelPending ? "Cancelling..." : "Cancel"}
+                                  </button>
+                                );
+                              })()}
                             </div>
                           </td>
                         </tr>
@@ -573,6 +685,11 @@ export default function CreateTournamentPage() {
               {isStartError && startError && (
                 <p className="text-xs text-red-400 font-bold mt-3">
                   {startError.message}
+                </p>
+              )}
+              {isCancelError && cancelError && (
+                <p className="text-xs text-red-400 font-bold mt-3">
+                  {cancelError.message}
                 </p>
               )}
             </section>

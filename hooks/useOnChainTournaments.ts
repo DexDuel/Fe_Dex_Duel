@@ -5,7 +5,7 @@ import type { SuiClient, SuiEvent, SuiObjectData } from "@onelabs/sui/client";
 import { useQuery } from "@tanstack/react-query";
 import { PACKAGE_ID } from "@/lib/constants";
 
-export type TournamentStatus = "live" | "upcoming" | "ended";
+export type TournamentStatus = "live" | "upcoming" | "ended" | "cancelled";
 
 export interface OnChainTournament {
   sessionId: string;
@@ -27,6 +27,8 @@ export interface OnChainTournament {
   yieldPoolRaw: number;
   winnerDirection: number;
   isActive: boolean;
+  isCancelled: boolean;
+  minParticipants: number;
   status: TournamentStatus;
   creatorAddress: string;
 }
@@ -69,6 +71,8 @@ type ParsedRound = {
   isActive: boolean;
   isEnded: boolean;
   isSettled: boolean;
+  isCancelled: boolean;
+  minParticipants: number;
 };
 
 const OBJECT_TYPES = {
@@ -128,7 +132,9 @@ function statusFromTimes(
   isActive: boolean,
   isEnded: boolean,
   isSettled: boolean,
+  isCancelled: boolean,
 ): TournamentStatus {
+  if (isCancelled) return "cancelled";
   if (isSettled || isEnded || (endTimeMs > 0 && nowMs >= endTimeMs)) return "ended";
   if (isActive) return "live";
   if (startTimeMs > 0 && nowMs < startTimeMs) return "upcoming";
@@ -171,9 +177,11 @@ function parseRound(roundData: SuiObjectData): ParsedRound | null {
     totalPoolRaw: readBalanceValue(fields["total_pool"]),
     yieldPoolRaw: readBalanceValue(fields["yield_pool"]),
     winnerDirection: toNumber(fields["winner_direction"]),
+    minParticipants: toNumber(fields["min_participants"]),
     isActive: toBoolean(status["is_active"]),
     isEnded: toBoolean(status["is_ended"]),
     isSettled: toBoolean(status["is_settled"]),
+    isCancelled: toBoolean(status["is_cancelled"]),
   };
 }
 
@@ -286,6 +294,8 @@ async function fetchOnChainTournaments(client: SuiClient): Promise<OnChainTourna
       yieldPoolRaw: round.yieldPoolRaw,
       winnerDirection: round.winnerDirection,
       isActive: round.isActive,
+      isCancelled: round.isCancelled,
+      minParticipants: round.minParticipants,
       status: statusFromTimes(
         now,
         round.startTimeMs || draft.startTimeFromEvent,
@@ -293,6 +303,7 @@ async function fetchOnChainTournaments(client: SuiClient): Promise<OnChainTourna
         round.isActive,
         round.isEnded,
         round.isSettled,
+        round.isCancelled,
       ),
       creatorAddress: draft.creatorAddress,
     };

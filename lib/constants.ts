@@ -1,26 +1,38 @@
 export const PACKAGE_ID =
-  "0x24a6e095d2ebbfcfc4491f93e1bbb68ebef3e16740e90dfcc290d2feefe6ce6b";
+  "0xc260f21c3763480017b9208de051b2ca8f42d2be5dae8c64669e30db7e13eb1d";
 
 export const OBJECT_IDS = {
-  FAUCET: "0x27329696d1b98a0d8890e8c67871d3ff5946a132ceae20ff3a1d47fe7496215d",
+  FAUCET: "0x16b16664d2a8963f3705839152ed85d58ce617dc13c3b7d89d8bea45ce816eae",
   ADMIN_CAP:
-    "0x175c1c51a4ec492dfedb6a58fada90bdd8bcc9de5dcfc2b13b354d2e08bf2f57",
-  TREASURY:
-    "0xd361feb2e5a426a6871983b9469da924c3528a617dd21e4217e11aa8b4042d7c",
-  CLOCK: "0x0000000000000000000000000000000000000000000000000000000000000006",
+    "0x348eb18f5d14e51b74c9bbce8546e7248a89158f9c89e06e65b1752a9c34416a",
+  TREASURY: "0x710eec94e6a9e9aefa20b1481c17a081e89e0029d7094db7839bfa4b4cd5a80b",
+  CLOCK: "0x6",
 };
 
 export const MODULES = {
-  OUSDT: `${PACKAGE_ID}::ousdt`,
+  USDT: `${PACKAGE_ID}::usdt`,
   GAME_ROUND: `${PACKAGE_ID}::game_round`,
   PREDICTION: `${PACKAGE_ID}::prediction`,
   LEADERBOARD: `${PACKAGE_ID}::leaderboard`,
   GAME_CONTROLLER: `${PACKAGE_ID}::game_controller`,
 } as const;
 
-export const OUSDT_TYPE = `${PACKAGE_ID}::ousdt::OUSDT`;
-/** @deprecated use OUSDT_TYPE */
-export const USDT_TYPE = OUSDT_TYPE;
+export const USDT_TYPE = `${PACKAGE_ID}::usdt::USDT`;
+/** @deprecated use USDT_TYPE */
+export const OUSDT_TYPE = USDT_TYPE;
+
+/**
+ * Synced with SC-Dex-Duel/README.md frontend configuration block.
+ */
+export const SC_DEX_DUEL_CONFIG = {
+  NETWORK: "testnet",
+  PACKAGE_ID,
+  FAUCET_ID: OBJECT_IDS.FAUCET,
+  TREASURY_ID: OBJECT_IDS.TREASURY,
+  ADMIN_CAP_ID: OBJECT_IDS.ADMIN_CAP,
+  CLOCK_ID: OBJECT_IDS.CLOCK,
+  USDT_COIN_TYPE: USDT_TYPE,
+} as const;
 export const FAUCET_AMOUNT_USDT = 100;
 export const FAUCET_AMOUNT_RAW = 100_000_000; // 6 decimals
 export const USDT_DECIMALS = 6;

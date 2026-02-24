@@ -25,7 +25,7 @@ export function useClaimReward() {
     setIsError(false);
     setError(null);
     try {
-      const tx = buildClaimRewardTx(roundId, registryId);
+      const tx = buildClaimRewardTx(roundId, registryId, account.address);
       tx.setSender(account.address);
 
       const bytes = await tx.build({ client });

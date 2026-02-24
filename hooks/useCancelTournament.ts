@@ -1,41 +1,45 @@
 "use client";
 
-import { useSuiClient, useCurrentAccount, useCurrentWallet } from "@onelabs/dapp-kit";
 import { useState } from "react";
-import { buildClaimFaucetTx } from "@/lib/transactions";
-import { FAUCET_AMOUNT_USDT } from "@/lib/constants";
+import { useCurrentAccount, useCurrentWallet, useSuiClient } from "@onelabs/dapp-kit";
+import { buildCancelTournamentTx } from "@/lib/transactions";
 import { signTransactionForExecution } from "@/lib/walletFeatures";
 
-/**
- * Hook to claim 100 USDT from the public faucet.
- *
- * Pre-builds BCS bytes with the testnet client so TransferObjects
- * is preserved — bypasses OneWallet's JSON→BCS re-encoding which
- * silently drops TransferObjects commands.
- */
-export function useFaucet() {
+export interface CancelTournamentParams {
+  sessionId: string;
+  roundId: string;
+}
+
+export function useCancelTournament() {
   const client = useSuiClient();
   const account = useCurrentAccount();
   const { currentWallet } = useCurrentWallet();
+
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isError, setIsError] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  async function claimFaucet(senderAddress: string) {
+  function reset() {
+    setIsPending(false);
+    setIsSuccess(false);
+    setIsError(false);
+    setError(null);
+  }
+
+  async function cancelTournament(params: CancelTournamentParams) {
     if (!currentWallet || !account) throw new Error("Wallet not connected");
+
     setIsPending(true);
     setIsSuccess(false);
     setIsError(false);
     setError(null);
+
     try {
-      const tx = buildClaimFaucetTx(senderAddress);
-      tx.setSender(senderAddress);
+      const tx = buildCancelTournamentTx(params);
+      tx.setSender(account.address);
 
-      // Build BCS bytes via our testnet client — all commands preserved
       const bytes = await tx.build({ client });
-
-      // Sign raw bytes directly (skip wallet JSON→BCS re-encoding)
       const { transactionBlockBytes, signature } = await signTransactionForExecution(
         currentWallet,
         account,
@@ -43,30 +47,22 @@ export function useFaucet() {
         bytes,
       );
 
-      // Submit via testnet RPC
       const result = await client.executeTransactionBlock({
         transactionBlock: transactionBlockBytes,
         signature,
-        options: { showRawEffects: true },
+        options: { showObjectChanges: true, showRawEffects: true },
       });
 
       setIsSuccess(true);
       return result;
-    } catch (e) {
+    } catch (executionError) {
       setIsError(true);
-      setError(e as Error);
-      throw e;
+      setError(executionError as Error);
+      throw executionError;
     } finally {
       setIsPending(false);
     }
   }
 
-  return {
-    claimFaucet,
-    isPending,
-    isSuccess,
-    isError,
-    error,
-    faucetAmount: FAUCET_AMOUNT_USDT,
-  };
+  return { cancelTournament, isPending, isSuccess, isError, error, reset };
 }

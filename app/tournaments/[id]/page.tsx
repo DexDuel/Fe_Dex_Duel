@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
 import { useJoinGame } from "@/hooks/useJoinGame";
+import { useClaimRefund } from "@/hooks/useClaimRefund";
 import {
   toFinnhubSymbol,
   useMarketCandles,
@@ -82,6 +83,13 @@ export default function TournamentDetailPage() {
     error: joinError,
     reset: resetJoin,
   } = useJoinGame();
+  const {
+    claimRefund,
+    isPending: isClaimRefundPending,
+    isError: isClaimRefundError,
+    error: claimRefundError,
+    reset: resetClaimRefund,
+  } = useClaimRefund();
 
   const joinEventsQuery = useRoundJoinEvents(tournament?.roundNumber);
   const joinEvents = useMemo(
@@ -104,6 +112,8 @@ export default function TournamentDetailPage() {
   const [selectedDirection, setSelectedDirection] = useState<PickDirection | null>(null);
   const [txDigest, setTxDigest] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [refundTxDigest, setRefundTxDigest] = useState<string | null>(null);
+  const [refundMessage, setRefundMessage] = useState<string | null>(null);
   const [isJoinHighlighted, setIsJoinHighlighted] = useState(false);
 
   useEffect(() => {
@@ -130,6 +140,7 @@ export default function TournamentDetailPage() {
   const entryFeeRaw = tournament?.entryFeeRaw ?? 0;
   const liveStatus = useMemo(() => {
     if (!tournament) return "upcoming" as const;
+    if (tournament.status === "cancelled") return "cancelled" as const;
     if (tournament.status === "ended") return "ended" as const;
     if (tournament.isActive) return "live" as const;
     if (nowMs >= tournament.endTimeMs) return "ended" as const;
@@ -155,7 +166,7 @@ export default function TournamentDetailPage() {
       return;
     }
     if (!balance?.largestCoin) {
-      setSubmitError("No OUSDT coin object found. Claim faucet first.");
+      setSubmitError("No USDT coin object found. Claim faucet first.");
       return;
     }
 
@@ -179,6 +190,25 @@ export default function TournamentDetailPage() {
       } else {
         setSubmitError("Failed to submit prediction transaction.");
       }
+    }
+  }
+
+  async function handleClaimRefund() {
+    if (!account || !tournament) return;
+
+    resetClaimRefund();
+    setRefundMessage(null);
+    setRefundTxDigest(null);
+
+    try {
+      const result = await claimRefund(tournament.roundObjectId);
+      setRefundTxDigest(result.digest ?? null);
+      setRefundMessage("Refund transaction submitted.");
+      await Promise.all([refetchBalance(), tournamentsQuery.refetch(), joinEventsQuery.refetch()]);
+    } catch (error) {
+      setRefundMessage(
+        error instanceof Error ? error.message : "Failed to claim refund.",
+      );
     }
   }
 
@@ -236,6 +266,8 @@ export default function TournamentDetailPage() {
                       style={
                         liveStatus === "live"
                           ? { color: "#0df280", backgroundColor: "rgba(13,242,128,0.12)" }
+                          : liveStatus === "cancelled"
+                            ? { color: "#ef4444", backgroundColor: "rgba(239,68,68,0.12)" }
                           : liveStatus === "upcoming"
                             ? { color: "#f59e0b", backgroundColor: "rgba(245,158,11,0.12)" }
                             : { color: "#94a3b8", backgroundColor: "rgba(148,163,184,0.12)" }
@@ -275,6 +307,8 @@ export default function TournamentDetailPage() {
                     <p className="font-black">
                       {liveStatus === "upcoming"
                         ? `Starts in ${formatTimeLeft(tournament.startTimeMs)}`
+                        : liveStatus === "cancelled"
+                          ? "Cancelled"
                         : formatTimeLeft(tournament.endTimeMs)}
                     </p>
                   </div>
@@ -446,6 +480,8 @@ export default function TournamentDetailPage() {
                     >
                       {isJoinPending
                         ? "Submitting transaction..."
+                        : liveStatus === "cancelled"
+                          ? "Tournament cancelled"
                         : liveStatus !== "live"
                           ? "Tournament not live"
                           : !hasEnoughBalance
@@ -465,7 +501,9 @@ export default function TournamentDetailPage() {
                     </p>
                   )}
 
-                  {liveStatus !== "live" && nowMs >= (tournament?.startTimeMs ?? 0) && (
+                  {liveStatus !== "live" &&
+                    liveStatus !== "cancelled" &&
+                    nowMs >= (tournament?.startTimeMs ?? 0) && (
                     <div className="mt-2 space-y-2">
                       <p className="text-xs text-amber-300 font-bold">
                         Round not active on-chain yet. {isCreator ? "You (the creator)" : "Creator"} must run start round first.
@@ -478,6 +516,45 @@ export default function TournamentDetailPage() {
                           Go to Control Board
                           <span className="material-symbols-outlined text-xs">arrow_forward</span>
                         </Link>
+                      )}
+                    </div>
+                  )}
+
+                  {liveStatus === "cancelled" && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs text-red-300 font-bold">
+                        Tournament cancelled. Participants can claim refund.
+                      </p>
+                      {account && (
+                        <button
+                          type="button"
+                          onClick={handleClaimRefund}
+                          disabled={isClaimRefundPending}
+                          className="w-full py-2.5 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                          style={{
+                            backgroundColor: "rgba(239,68,68,0.18)",
+                            color: "#fca5a5",
+                            border: "1px solid rgba(239,68,68,0.35)",
+                          }}
+                        >
+                          {isClaimRefundPending ? "Claiming refund..." : "Claim Refund"}
+                        </button>
+                      )}
+                      {refundMessage && (
+                        <p className="text-xs font-bold text-slate-200">{refundMessage}</p>
+                      )}
+                      {isClaimRefundError && claimRefundError && (
+                        <p className="text-xs font-bold text-red-400">{claimRefundError.message}</p>
+                      )}
+                      {refundTxDigest && (
+                        <a
+                          href={`${EXPLORER_BASE}/txblock/${refundTxDigest}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-2 text-xs font-bold text-sky-300 hover:text-sky-200"
+                        >
+                          Refund tx: {refundTxDigest.slice(0, 12)}...
+                        </a>
                       )}
                     </div>
                   )}

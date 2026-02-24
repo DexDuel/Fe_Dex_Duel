@@ -18,6 +18,26 @@ function formatAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+type AccountLike = {
+  address: string;
+  label?: string;
+  name?: string;
+  nickname?: string;
+  displayName?: string;
+  display_name?: string;
+  accountName?: string;
+  account_name?: string;
+  userName?: string;
+  username?: string;
+  profileName?: string;
+  profile_name?: string;
+  metadata?: Record<string, unknown>;
+};
+
+function normalizeAddress(address: string): string {
+  return address.trim().toLowerCase();
+}
+
 export function WalletMenu({ showCopy = true }: WalletMenuProps) {
   const account = useCurrentAccount();
   const accountsFromStore = useAccounts();
@@ -55,7 +75,10 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
   }
 
   async function handleSwitchAccount(address: string) {
-    const target = accounts.find((item) => item.address === address);
+    const normalizedTargetAddress = normalizeAddress(address);
+    const target = accounts.find(
+      (item) => normalizeAddress(item.address) === normalizedTargetAddress,
+    );
     if (!target) {
       setSwitchError("Selected account is not available in this wallet session.");
       return;
@@ -84,7 +107,7 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
     router.push("/");
   }
 
-  const shortAddr = formatAddress(currentAccount.address);
+  const currentAccountDisplay = formatAddress(currentAccount.address);
 
   return (
     <div ref={ref} className="relative">
@@ -96,7 +119,7 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
         <span className="material-symbols-outlined text-sm leading-none">
           account_balance_wallet
         </span>
-        {shortAddr}
+        {currentAccountDisplay}
         <span className="material-symbols-outlined text-sm leading-none">
           {open ? "expand_less" : "expand_more"}
         </span>
@@ -115,7 +138,7 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
               Connected Wallet
             </p>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-mono text-slate-300 truncate">{shortAddr}</p>
+              <p className="text-xs font-semibold text-slate-300 truncate">{currentAccountDisplay}</p>
               {showCopy && (
                 <button
                   onClick={handleCopy}
@@ -138,7 +161,8 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
               </p>
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {accounts.map((item) => {
-                  const isActive = item.address === currentAccount.address;
+                  const isActive =
+                    normalizeAddress(item.address) === normalizeAddress(currentAccount.address);
                   return (
                     <button
                       key={item.address}
@@ -157,7 +181,7 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
                             }
                       }
                     >
-                      <span className="font-mono truncate pr-2">
+                      <span className="truncate pr-2">
                         {formatAddress(item.address)}
                       </span>
                       <span className="material-symbols-outlined text-sm leading-none">

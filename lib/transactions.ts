@@ -3,15 +3,15 @@ import { PACKAGE_ID, OBJECT_IDS } from "./constants";
 
 /**
  * Claim 100 USDT from the public faucet.
- * The minted coin is transferred to `senderAddress`.
  */
-export function buildClaimFaucetTx(): Transaction {
+export function buildClaimFaucetTx(senderAddress: string): Transaction {
   const tx = new Transaction();
   tx.setGasBudget(10_000_000);
-  tx.moveCall({
-    target: `${PACKAGE_ID}::ousdt::claim_faucet`,
+  const usdtCoin = tx.moveCall({
+    target: `${PACKAGE_ID}::usdt::claim_faucet`,
     arguments: [tx.object(OBJECT_IDS.FAUCET)],
   });
+  tx.transferObjects([usdtCoin], tx.pure.address(senderAddress));
   return tx;
 }
 
@@ -60,16 +60,15 @@ export function buildJoinGameTx(
 export function buildClaimRewardTx(
   roundId: string,
   registryId: string,
+  senderAddress: string,
 ): Transaction {
   const tx = new Transaction();
   tx.setGasBudget(10_000_000);
-  tx.moveCall({
+  const rewardCoin = tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::claim_rewards`,
-    arguments: [
-      tx.object(roundId),
-      tx.object(registryId),
-    ],
+    arguments: [tx.object(roundId), tx.object(registryId)],
   });
+  tx.transferObjects([rewardCoin], tx.pure.address(senderAddress));
   return tx;
 }
 
@@ -80,6 +79,7 @@ export interface CreateTournamentParams {
   startTimeMs: number;
   endTimeMs: number;
   entryFeeRaw: number;
+  minParticipants: number;
   earlyWindowMinutes: number;
 }
 
@@ -102,7 +102,7 @@ export function buildCreateTournamentTx(
   params: CreateTournamentParams,
 ): Transaction {
   const tx = new Transaction();
-  tx.setGasBudget(30_000_000);
+  tx.setGasBudget(35_000_000);
 
   tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::create_game_session`,
@@ -114,6 +114,7 @@ export function buildCreateTournamentTx(
       tx.pure.u64(params.startTimeMs),
       tx.pure.u64(params.endTimeMs),
       tx.pure.u64(params.entryFeeRaw),
+      tx.pure.u64(params.minParticipants),
       tx.pure.u64(params.earlyWindowMinutes),
     ],
   });
@@ -147,6 +148,48 @@ export function buildStartRoundTx(params: StartRoundParams): Transaction {
       tx.pure.u64(params.priceStartRaw),
       tx.object(OBJECT_IDS.CLOCK),
     ],
+  });
+
+  return tx;
+}
+
+export interface CancelTournamentParams {
+  sessionId: string;
+  roundId: string;
+}
+
+/**
+ * Admin-only flow:
+ * Cancel an upcoming round or a low-participation live round.
+ */
+export function buildCancelTournamentTx(params: CancelTournamentParams): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudget(10_000_000);
+
+  tx.moveCall({
+    target: `${PACKAGE_ID}::game_controller::cancel_tournament`,
+    arguments: [
+      tx.object(OBJECT_IDS.ADMIN_CAP),
+      tx.object(params.sessionId),
+      tx.object(params.roundId),
+      tx.object(OBJECT_IDS.CLOCK),
+    ],
+  });
+
+  return tx;
+}
+
+/**
+ * Player flow:
+ * Claim full entry-fee refund after a cancelled tournament.
+ */
+export function buildClaimRefundTx(roundId: string): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudget(10_000_000);
+
+  tx.moveCall({
+    target: `${PACKAGE_ID}::game_controller::claim_tournament_refund`,
+    arguments: [tx.object(roundId)],
   });
 
   return tx;
