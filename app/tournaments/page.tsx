@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
-import { WalletMenu } from "@/components/WalletMenu";
-import { useFaucet } from "@/hooks/useFaucet";
+import { useCurrentAccount } from "@onelabs/dapp-kit";
 import { useJoinGame } from "@/hooks/useJoinGame";
 import {
   type OnChainTournament,
@@ -15,7 +13,6 @@ import {
   DIRECTION,
   EXPLORER_BASE,
   formatUSDT,
-  isCreateTournamentAdmin,
 } from "@/lib/constants";
 
 type PickDirection = 1 | 2;
@@ -55,60 +52,18 @@ function formatTimeLeft(targetMs: number): string {
   return `${mins}m`;
 }
 
-function FaucetButton({ address, onSuccess }: { address: string; onSuccess?: () => void }) {
-  const { claimFaucet, isPending, isSuccess, isError, error } = useFaucet();
 
-  async function handleClaim() {
-    try {
-      await claimFaucet(address);
-      onSuccess?.();
-    } catch {
-      // Error is exposed by hook state below.
-    }
-  }
-
-  if (isSuccess) {
-    return (
-      <span
-        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
-        style={{ backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280" }}
-      >
-        <span className="material-symbols-outlined text-sm leading-none">check_circle</span>
-        +100 USDT sent
-      </span>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={handleClaim}
-        disabled={isPending}
-        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all hover:opacity-80 disabled:opacity-50"
-        style={{
-          backgroundColor: "rgba(13,242,128,0.12)",
-          color: "#0df280",
-          border: "1px solid rgba(13,242,128,0.25)",
-        }}
-      >
-        <span className="material-symbols-outlined text-sm leading-none">water_drop</span>
-        {isPending ? "Claiming..." : "Get 100 USDT"}
-      </button>
-      {isError && (
-        <span className="text-[10px] font-bold text-red-400 max-w-64 text-right leading-tight">
-          {error?.message ?? "Faucet transaction failed"}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export default function TournamentsPage() {
   const account = useCurrentAccount();
-  const isAdmin = isCreateTournamentAdmin(account?.address);
   const { balance, refetch: refetchBalance } = useUSDTBalance(account?.address);
   const tournamentsQuery = useOnChainTournaments();
   const { joinGame } = useJoinGame();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming" | "ended">("all");
   const [search, setSearch] = useState("");
@@ -232,74 +187,7 @@ export default function TournamentsPage() {
       style={{ backgroundColor: "#0a0a0a" }}
       className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>
-                swords
-              </span>
-              <h1 className="text-lg font-black tracking-tighter uppercase italic">
-                GameFi <span style={{ color: "#0df280" }}>Arena</span>
-              </h1>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <span
-                className="text-sm font-bold uppercase tracking-wider"
-                style={{ color: "#0df280", borderBottom: "2px solid #0df280", paddingBottom: "2px" }}
-              >
-                Tournaments
-              </span>
-              {isAdmin && (
-                <Link
-                  href="/arena"
-                  className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-                >
-                  Create Tournaments
-                </Link>
-              )}
-              <Link
-                href="/leaderboard"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Leaderboard
-              </Link>
-              <Link
-                href="/profile"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                My Arena
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            {account ? (
-              <>
-                <div
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold"
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <span
-                    className="material-symbols-outlined text-sm leading-none"
-                    style={{ color: "#0df280" }}
-                  >
-                    toll
-                  </span>
-                  <span>{balance ? `${balance.formatted} USDT` : "..."}</span>
-                </div>
 
-                <FaucetButton address={account.address} onSuccess={refetchBalance} />
-                <WalletMenu />
-              </>
-            ) : (
-              <ConnectButton />
-            )}
-          </div>
-        </div>
-      </nav>
 
       <main className="max-w-7xl mx-auto px-6 pt-28 pb-16">
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -312,7 +200,7 @@ export default function TournamentsPage() {
             </p>
           </div>
           <div className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            Last refresh: {new Date().toLocaleTimeString()}
+            Last refresh: {mounted ? new Date().toLocaleTimeString() : "--:--:--"}
           </div>
         </div>
 
@@ -382,19 +270,13 @@ export default function TournamentsPage() {
         {!tournamentsQuery.isLoading && !tournamentsQuery.isError && filteredTournaments.length === 0 && (
           <div className="glass-panel rounded-2xl p-8 text-center">
             <p className="text-slate-400 mb-3">No on-chain tournaments found yet.</p>
-            {isAdmin ? (
-              <Link
-                href="/arena"
-                className="inline-flex px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider"
-                style={{ backgroundColor: "#0df280", color: "#0a0a0a" }}
-              >
-                Create First Tournament
-              </Link>
-            ) : (
-              <p className="text-xs text-slate-500">
-                Wait for admin to create a tournament, then refresh this page.
-              </p>
-            )}
+            <Link
+              href="/arena"
+              className="inline-flex px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider"
+              style={{ backgroundColor: "#0df280", color: "#0a0a0a" }}
+            >
+              Create First Tournament
+            </Link>
           </div>
         )}
 

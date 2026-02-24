@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ConnectModal, useCurrentAccount } from "@onelabs/dapp-kit";
+import { useCurrentAccount } from "@onelabs/dapp-kit";
 
 /* ─── Ticker items (duplicated in JSX for seamless loop) ────────── */
 function TickerContent() {
@@ -50,47 +50,7 @@ export default function LandingPage() {
     <div style={{ backgroundColor: "#0a0a0a" }} className="text-slate-100 antialiased overflow-x-hidden min-h-screen">
 
       {/* ── Top Navigation ──────────────────────────────────────── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-4xl" style={{ color: "#0df280" }}>swords</span>
-            <div>
-              <h1 className="text-xl font-black tracking-tighter uppercase italic">
-                GameFi <span style={{ color: "#0df280" }}>Arena</span>
-              </h1>
-              <p className="text-[10px] font-bold uppercase" style={{ color: "#3b82f6", letterSpacing: "0.2em" }}>
-                Powered by OneChain
-              </p>
-            </div>
-          </div>
 
-          <div className="hidden md:flex items-center gap-10">
-            {["Markets", "How it Works", "Leaderboard", "Docs"].map((item) => (
-              <a key={item} href="#"
-                className="text-sm font-semibold text-slate-300 hover:text-primary transition-colors uppercase tracking-wider">
-                {item}
-              </a>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-4">
-            <Link href="/tournaments"
-              className="hidden lg:flex items-center gap-2 bg-white/5 hover:bg-white/10 px-4 py-2 rounded font-bold text-xs uppercase tracking-widest border border-white/10 transition-all">
-              <span className="material-symbols-outlined text-sm leading-none">rocket_launch</span>
-              Launch App
-            </Link>
-            <ConnectModal
-              trigger={
-                <button
-                  style={{ backgroundColor: "#0df280", color: "#0a0a0a" }}
-                  className="px-6 py-2.5 rounded font-black text-xs uppercase tracking-widest transition-all glow-primary hover:opacity-80">
-                  Connect Wallet
-                </button>
-              }
-            />
-          </div>
-        </div>
-      </nav>
 
       {/* ── Hero ────────────────────────────────────────────────── */}
       <section className="relative pt-32 pb-20 px-6 min-h-[90vh] flex flex-col justify-center items-center overflow-hidden">

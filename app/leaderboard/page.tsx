@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
-import { WalletMenu } from "@/components/WalletMenu";
+import { useMemo, useState, useSyncExternalStore } from "react";
+import { useCurrentAccount } from "@onelabs/dapp-kit";
 import { useLeaderboardRows } from "@/hooks/useLeaderboard";
-import { isCreateTournamentAdmin, shortenAddress } from "@/lib/constants";
+import { shortenAddress } from "@/lib/constants";
 
 function rankColor(rank: number): string {
   if (rank === 1) return "#facc15";
@@ -21,8 +19,12 @@ function formatLastUpdate(timestampMs: number): string {
 
 export default function LeaderboardPage() {
   const account = useCurrentAccount();
-  const isAdmin = isCreateTournamentAdmin(account?.address);
   const [search, setSearch] = useState("");
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const leaderboardQuery = useLeaderboardRows();
   const rows = useMemo(() => leaderboardQuery.data ?? [], [leaderboardQuery.data]);
@@ -44,54 +46,14 @@ export default function LeaderboardPage() {
     [rows],
   );
 
+  if (!mounted) return null;
+
   return (
     <div
       style={{ backgroundColor: "#0a0a0a" }}
       className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>
-                swords
-              </span>
-              <h1 className="text-lg font-black tracking-tighter uppercase italic">
-                GameFi <span style={{ color: "#0df280" }}>Arena</span>
-              </h1>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link
-                href="/tournaments"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Tournaments
-              </Link>
-              {isAdmin && (
-                <Link
-                  href="/arena"
-                  className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-                >
-                  Create Tournaments
-                </Link>
-              )}
-              <span
-                className="text-sm font-bold uppercase tracking-wider"
-                style={{ color: "#0df280", borderBottom: "2px solid #0df280", paddingBottom: "2px" }}
-              >
-                Leaderboard
-              </span>
-              <Link
-                href="/profile"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                My Arena
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">{account ? <WalletMenu /> : <ConnectButton />}</div>
-        </div>
-      </nav>
+
 
       <main className="max-w-7xl mx-auto px-6 pt-28 pb-16">
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -104,7 +66,7 @@ export default function LeaderboardPage() {
             </p>
           </div>
           <div className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            Last event: {formatLastUpdate(lastUpdated)}
+            Last event: {mounted ? formatLastUpdate(lastUpdated) : "..."}
           </div>
         </div>
 
@@ -239,7 +201,7 @@ export default function LeaderboardPage() {
                       <td className="px-5 py-4 text-slate-300">{row.winEvents}</td>
                       <td className="px-5 py-4 text-slate-300">{row.currentStreak}</td>
                       <td className="px-5 py-4 text-slate-400 text-xs">
-                        {formatLastUpdate(row.lastUpdateMs)}
+                        {mounted ? formatLastUpdate(row.lastUpdateMs) : "..."}
                       </td>
                     </tr>
                   );

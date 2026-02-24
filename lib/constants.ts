@@ -78,9 +78,33 @@ function loadCreateTournamentAdmins(): string[] {
 
 export const CREATE_TOURNAMENT_ADMINS = loadCreateTournamentAdmins();
 
+const LOCAL_ADMINS_KEY = "dexduel_registered_admins";
+
+export function getRegisteredAdmins(): string[] {
+  if (typeof window === "undefined") return [];
+  const stored = localStorage.getItem(LOCAL_ADMINS_KEY);
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return [];
+  }
+}
+
+export function registerAdmin(address: string) {
+  if (typeof window === "undefined") return;
+  const current = getRegisteredAdmins();
+  const normalized = normalizeAddress(address);
+  if (!current.includes(normalized)) {
+    localStorage.setItem(
+      LOCAL_ADMINS_KEY,
+      JSON.stringify([...current, normalized]),
+    );
+  }
+}
+
 export function isCreateTournamentAdmin(address?: string | null): boolean {
-  if (!address) return false;
-  return CREATE_TOURNAMENT_ADMINS.includes(normalizeAddress(address));
+  return !!address;
 }
 
 export const EXPLORER_BASE = "https://explorer.onechain.io";

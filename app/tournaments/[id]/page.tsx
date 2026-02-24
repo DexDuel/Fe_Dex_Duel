@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
-import { WalletMenu } from "@/components/WalletMenu";
-import { useFaucet } from "@/hooks/useFaucet";
 import { useJoinGame } from "@/hooks/useJoinGame";
 import {
   toFinnhubSymbol,
@@ -21,9 +19,10 @@ import {
   DIRECTION,
   EXPLORER_BASE,
   formatUSDT,
-  isCreateTournamentAdmin,
   shortenAddress,
 } from "@/lib/constants";
+import { FaucetButton } from "@/components/FaucetButton";
+import { CandlestickChart } from "@/components/CandlestickChart";
 
 type PickDirection = 1 | 2;
 
@@ -48,87 +47,14 @@ function formatDirection(direction: number): "UP" | "DOWN" {
   return direction === DIRECTION.DOWN ? "DOWN" : "UP";
 }
 
-function buildChartPolyline(values: number[]): string {
-  if (values.length < 2) return "";
 
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const range = Math.max(0.0000001, maxValue - minValue);
 
-  return values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * 100;
-      const y = 100 - ((value - minValue) / range) * 100;
-      return `${x.toFixed(2)},${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
-
-function FaucetButton({
-  address,
-  onSuccess,
-}: {
-  address: string;
-  onSuccess?: () => void;
-}) {
-  const { claimFaucet, isPending, isSuccess, isError, error } = useFaucet();
-
-  async function handleClaim() {
-    try {
-      await claimFaucet(address);
-      onSuccess?.();
-    } catch {
-      // Error is shown below via hook state.
-    }
-  }
-
-  if (isSuccess) {
-    return (
-      <span
-        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
-        style={{ backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280" }}
-      >
-        <span className="material-symbols-outlined text-sm leading-none">
-          check_circle
-        </span>
-        +100 USDT sent
-      </span>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={handleClaim}
-        disabled={isPending}
-        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all hover:opacity-80 disabled:opacity-50"
-        style={{
-          backgroundColor: "rgba(13,242,128,0.12)",
-          color: "#0df280",
-          border: "1px solid rgba(13,242,128,0.25)",
-        }}
-      >
-        <span className="material-symbols-outlined text-sm leading-none">
-          water_drop
-        </span>
-        {isPending ? "Claiming..." : "Get 100 USDT"}
-      </button>
-      {isError && (
-        <span className="text-[10px] font-bold text-red-400 max-w-64 text-right leading-tight">
-          {error?.message ?? "Faucet transaction failed"}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export default function TournamentDetailPage() {
   const params = useParams();
   const account = useCurrentAccount();
-  const isAdmin = isCreateTournamentAdmin(account?.address);
-
   const routeId = params?.id;
-  const sessionId = Array.isArray(routeId) ? routeId[0] : routeId;
+  const sessionId = Array.isArray(routeId) ? (routeId[0] as string) : (routeId as string);
 
   const tournamentsQuery = useOnChainTournaments();
   const tournaments = useMemo(() => tournamentsQuery.data ?? [], [tournamentsQuery.data]);
@@ -141,6 +67,11 @@ export default function TournamentDetailPage() {
       ) ?? null
     );
   }, [sessionId, tournaments]);
+
+  const isCreator = useMemo(() => {
+    if (!account?.address || !tournament) return false;
+    return tournament.creatorAddress.toLowerCase() === account.address.toLowerCase();
+  }, [account, tournament]);
 
   const { balance, refetch: refetchBalance } = useUSDTBalance(account?.address);
   const {
@@ -168,42 +99,7 @@ export default function TournamentDetailPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const candlePrices = useMemo(() => {
-    const candles = candlesQuery.data;
-    if (!candles || candles.s !== "ok") return [] as number[];
-    return candles.c
-      .map((value) => Number(value))
-      .filter((value) => Number.isFinite(value));
-  }, [candlesQuery.data]);
-  const quoteAnimatedPrices = useMemo(() => {
-    const quote = quoteQuery.data;
-    if (!quote) return [] as number[];
-    const current = Number(quote.c);
-    if (!Number.isFinite(current) || current <= 0) return [] as number[];
 
-    const drift = Number(quote.dp) / 100;
-    const points = 90;
-    const phase = Math.floor(nowMs / 1000);
-
-    return Array.from({ length: points }, (_, index) => {
-      const progress = index / (points - 1);
-      const trend = current * (1 + drift * 0.02 * (progress - 0.5));
-      const waveA = current * 0.0012 * Math.sin((phase + index) * 0.55);
-      const waveB = current * 0.0006 * Math.sin((phase + index) * 1.15);
-      return Math.max(0.0000001, trend + waveA + waveB);
-    });
-  }, [quoteQuery.data, nowMs]);
-
-  const effectiveChartPrices = useMemo(() => {
-    if (candlePrices.length >= 2) return candlePrices;
-    return quoteAnimatedPrices;
-  }, [candlePrices, quoteAnimatedPrices]);
-
-  const usingQuoteFallback = candlePrices.length < 2 && quoteAnimatedPrices.length >= 2;
-  const chartPoints = useMemo(
-    () => buildChartPolyline(effectiveChartPrices),
-    [effectiveChartPrices],
-  );
 
   const [selectedDirection, setSelectedDirection] = useState<PickDirection | null>(null);
   const [txDigest, setTxDigest] = useState<string | null>(null);
@@ -291,80 +187,7 @@ export default function TournamentDetailPage() {
       style={{ backgroundColor: "#0a0a0a" }}
       className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>
-                swords
-              </span>
-              <h1 className="text-lg font-black tracking-tighter uppercase italic">
-                GameFi <span style={{ color: "#0df280" }}>Arena</span>
-              </h1>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <span
-                className="text-sm font-bold uppercase tracking-wider"
-                style={{
-                  color: "#0df280",
-                  borderBottom: "2px solid #0df280",
-                  paddingBottom: "2px",
-                }}
-              >
-                Tournaments
-              </span>
-              {isAdmin && (
-                <Link
-                  href="/arena"
-                  className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-                >
-                  Create Tournaments
-                </Link>
-              )}
-              <Link
-                href="/leaderboard"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Leaderboard
-              </Link>
-              <Link
-                href="/profile"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                My Arena
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            {account ? (
-              <>
-                <div
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold"
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <span
-                    className="material-symbols-outlined text-sm leading-none"
-                    style={{ color: "#0df280" }}
-                  >
-                    toll
-                  </span>
-                  <span>{balance ? `${balance.formatted} USDT` : "..."}</span>
-                </div>
 
-                {tournament && (!balance || !hasEnoughBalance) && (
-                  <FaucetButton address={account.address} onSuccess={refetchBalance} />
-                )}
-                <WalletMenu />
-              </>
-            ) : (
-              <ConnectButton />
-            )}
-          </div>
-        </div>
-      </nav>
 
       <main className="max-w-7xl mx-auto px-6 pt-28 pb-16">
         <div className="mb-6">
@@ -497,59 +320,24 @@ export default function TournamentDetailPage() {
                   </div>
 
                   <div
-                    className="w-full rounded-xl p-3"
+                    className="w-full rounded-xl overflow-hidden"
                     style={{
-                      backgroundColor: "rgba(13,242,128,0.05)",
-                      border: "1px solid rgba(13,242,128,0.15)",
+                      border: "1px solid rgba(255,255,255,0.06)",
                     }}
                   >
-                    {chartPoints ? (
-                      <svg viewBox="0 0 100 100" className="w-full h-44" preserveAspectRatio="none">
-                        <defs>
-                          <linearGradient id="price-fill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#0df280" stopOpacity="0.4" />
-                            <stop offset="100%" stopColor="#0df280" stopOpacity="0" />
-                          </linearGradient>
-                        </defs>
-                        <polyline
-                          points={`${chartPoints} 100,100 0,100`}
-                          fill="url(#price-fill)"
-                          stroke="none"
-                        />
-                        <polyline
-                          points={chartPoints}
-                          fill="none"
-                          stroke="#0df280"
-                          strokeWidth="1.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    ) : (
-                      <div className="h-44 flex items-center justify-center text-sm text-slate-500">
-                        {candlesQuery.isLoading || quoteQuery.isLoading
-                          ? "Loading live chart..."
-                          : "No chart data from Finnhub yet."}
-                      </div>
-                    )}
+                    <CandlestickChart
+                      candles={candlesQuery.data}
+                      quote={quoteQuery.data}
+                      symbol={finnhubSymbol ?? tournament.coinSymbol}
+                      isLoading={candlesQuery.isLoading || quoteQuery.isLoading}
+                    />
                   </div>
 
-                  {usingQuoteFallback && (
-                    <p className="text-xs text-amber-300 font-bold mt-3">
-                      Candle API restricted for this symbol/key. Running live quote mode (2s ticks).
-                    </p>
-                  )}
 
                   {quoteQuery.isError && (
                     <p className="text-xs text-red-400 font-bold mt-3">
                       Quote error:{" "}
                       {quoteQuery.error instanceof Error ? quoteQuery.error.message : "Unknown"}
-                    </p>
-                  )}
-                  {candlesQuery.isError && !usingQuoteFallback && (
-                    <p className="text-xs text-red-400 font-bold mt-2">
-                      Candle error:{" "}
-                      {candlesQuery.error instanceof Error ? candlesQuery.error.message : "Unknown"}
                     </p>
                   )}
                 </div>
@@ -628,12 +416,17 @@ export default function TournamentDetailPage() {
                     </div>
                     <div className="flex items-center justify-between text-sm mt-2">
                       <span className="text-slate-400">Wallet Balance</span>
-                      <span
-                        className="font-black"
-                        style={{ color: hasEnoughBalance ? "#0df280" : "#ef4444" }}
-                      >
-                        {balance ? `${balance.formatted} USDT` : account ? "..." : "-"}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="font-black"
+                          style={{ color: hasEnoughBalance ? "#0df280" : "#ef4444" }}
+                        >
+                          {balance ? `${balance.formatted} USDT` : account ? "..." : "-"}
+                        </span>
+                        {account && !hasEnoughBalance && (
+                          <FaucetButton address={account.address} onSuccess={refetchBalance} />
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -673,9 +466,20 @@ export default function TournamentDetailPage() {
                   )}
 
                   {liveStatus !== "live" && nowMs >= (tournament?.startTimeMs ?? 0) && (
-                    <p className="text-xs text-amber-300 font-bold mt-2">
-                      Round not active on-chain yet. Admin must run start round first.
-                    </p>
+                    <div className="mt-2 space-y-2">
+                      <p className="text-xs text-amber-300 font-bold">
+                        Round not active on-chain yet. {isCreator ? "You (the creator)" : "Creator"} must run start round first.
+                      </p>
+                      {isCreator && (
+                        <Link
+                          href="/arena"
+                          className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-[#0df280] hover:underline"
+                        >
+                          Go to Control Board
+                          <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                        </Link>
+                      )}
+                    </div>
                   )}
 
                   {isJoinSuccess && txDigest && (

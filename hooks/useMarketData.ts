@@ -60,7 +60,7 @@ export function useMarketQuote(symbol?: string) {
     queryFn: () =>
       fetchJson<FinnhubQuote>(`/api/market/quote?${buildSearchParams({ symbol: symbol ?? "" })}`),
     enabled: Boolean(symbol),
-    refetchInterval: 2_000,
+    refetchInterval: 1_000,
   });
 }
 

@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
-import { WalletMenu } from "@/components/WalletMenu";
-import { useFaucet } from "@/hooks/useFaucet";
 import { useLeaderboardRows } from "@/hooks/useLeaderboard";
 import {
   useOnChainTournaments,
@@ -15,8 +13,8 @@ import {
   DIRECTION,
   EXPLORER_BASE,
   formatUSDT,
-  isCreateTournamentAdmin,
 } from "@/lib/constants";
+import { FaucetButton } from "@/components/FaucetButton";
 
 function formatDateTime(timestampMs: number): string {
   if (!timestampMs) return "-";
@@ -27,68 +25,16 @@ function formatDirection(direction: number): "UP" | "DOWN" {
   return direction === DIRECTION.DOWN ? "DOWN" : "UP";
 }
 
-function FaucetButton({
-  address,
-  onSuccess,
-}: {
-  address: string;
-  onSuccess?: () => void;
-}) {
-  const { claimFaucet, isPending, isSuccess, isError, error } = useFaucet();
 
-  async function handleClaim() {
-    try {
-      await claimFaucet(address);
-      onSuccess?.();
-    } catch {
-      // Error is shown below via hook state.
-    }
-  }
-
-  if (isSuccess) {
-    return (
-      <span
-        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1"
-        style={{ backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280" }}
-      >
-        <span className="material-symbols-outlined text-sm leading-none">
-          check_circle
-        </span>
-        +100 USDT sent
-      </span>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={handleClaim}
-        disabled={isPending}
-        className="text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all hover:opacity-80 disabled:opacity-50"
-        style={{
-          backgroundColor: "rgba(13,242,128,0.12)",
-          color: "#0df280",
-          border: "1px solid rgba(13,242,128,0.25)",
-        }}
-      >
-        <span className="material-symbols-outlined text-sm leading-none">
-          water_drop
-        </span>
-        {isPending ? "Claiming..." : "Get 100 USDT"}
-      </button>
-      {isError && (
-        <span className="text-[10px] font-bold text-red-400 max-w-64 text-right leading-tight">
-          {error?.message ?? "Faucet transaction failed"}
-        </span>
-      )}
-    </div>
-  );
-}
 
 export default function ProfilePage() {
   const account = useCurrentAccount();
-  const isAdmin = isCreateTournamentAdmin(account?.address);
   const normalizedAccount = account?.address.toLowerCase() ?? "";
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const { balance, refetch: refetchBalance } = useUSDTBalance(account?.address);
   const leaderboardQuery = useLeaderboardRows();
@@ -148,76 +94,7 @@ export default function ProfilePage() {
       style={{ backgroundColor: "#0a0a0a" }}
       className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>
-                swords
-              </span>
-              <h1 className="text-lg font-black tracking-tighter uppercase italic">
-                GameFi <span style={{ color: "#0df280" }}>Arena</span>
-              </h1>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link
-                href="/tournaments"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Tournaments
-              </Link>
-              {isAdmin && (
-                <Link
-                  href="/arena"
-                  className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-                >
-                  Create Tournaments
-                </Link>
-              )}
-              <Link
-                href="/leaderboard"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Leaderboard
-              </Link>
-              <span
-                className="text-sm font-bold uppercase tracking-wider"
-                style={{ color: "#0df280", borderBottom: "2px solid #0df280", paddingBottom: "2px" }}
-              >
-                My Arena
-              </span>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            {account ? (
-              <>
-                <div
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold"
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <span
-                    className="material-symbols-outlined text-sm leading-none"
-                    style={{ color: "#0df280" }}
-                  >
-                    toll
-                  </span>
-                  <span>{balance ? `${balance.formatted} USDT` : "..."}</span>
-                </div>
 
-                {(!balance || balance.raw < BigInt(100_000_000)) && (
-                  <FaucetButton address={account.address} onSuccess={refetchBalance} />
-                )}
-                <WalletMenu />
-              </>
-            ) : (
-              <ConnectButton />
-            )}
-          </div>
-        </div>
-      </nav>
 
       <main className="max-w-7xl mx-auto px-6 pt-28 pb-16">
         <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -247,9 +124,12 @@ export default function ProfilePage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
               <div className="glass-panel rounded-xl p-4">
-                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-                  OUSDT Balance
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
+                    OUSDT Balance
+                  </p>
+                  <FaucetButton address={account.address} onSuccess={refetchBalance} />
+                </div>
                 <p className="text-2xl font-black" style={{ color: "#0df280" }}>
                   {balance?.formatted ?? "0.00"}
                 </p>
@@ -361,7 +241,7 @@ export default function ProfilePage() {
                             style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
                           >
                             <td className="px-4 py-3 text-xs text-slate-400">
-                              {formatDateTime(event.timestampMs)}
+                              {mounted ? formatDateTime(event.timestampMs) : "..."}
                             </td>
                             <td className="px-4 py-3 text-sm font-bold">
                               {(tournamentMeta?.coinSymbol ?? "UNKNOWN").toUpperCase()} / USDT

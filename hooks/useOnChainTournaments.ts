@@ -28,6 +28,7 @@ export interface OnChainTournament {
   winnerDirection: number;
   isActive: boolean;
   status: TournamentStatus;
+  creatorAddress: string;
 }
 
 export interface JoinGameEvent {
@@ -50,6 +51,7 @@ type SessionDraft = {
   roundNumberFromEvent: number;
   startTimeFromEvent: number;
   endTimeFromEvent: number;
+  creatorAddress: string;
 };
 
 type ParsedRound = {
@@ -188,7 +190,7 @@ async function fetchCreateSessionTransactions(client: SuiClient) {
           function: "create_game_session",
         },
       },
-      options: { showObjectChanges: true, showEvents: true },
+      options: { showObjectChanges: true, showEvents: true, showInput: true },
       limit: 20,
       order: "descending",
       cursor,
@@ -236,6 +238,7 @@ async function fetchOnChainTournaments(client: SuiClient): Promise<OnChainTourna
       roundNumberFromEvent: toNumber(parsedJson.round_id),
       startTimeFromEvent: toNumber(parsedJson.start_time),
       endTimeFromEvent: toNumber(parsedJson.end_time),
+      creatorAddress: tx.transaction?.data.sender ?? "0x",
     });
   }
 
@@ -291,6 +294,7 @@ async function fetchOnChainTournaments(client: SuiClient): Promise<OnChainTourna
         round.isEnded,
         round.isSettled,
       ),
+      creatorAddress: draft.creatorAddress,
     };
 
     deduped.set(tournament.sessionId.toLowerCase(), tournament);

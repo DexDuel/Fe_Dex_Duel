@@ -1,9 +1,7 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import Link from "next/link";
+import { FormEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
-import { WalletMenu } from "@/components/WalletMenu";
 import { useCreateTournament } from "@/hooks/useCreateTournament";
 import { toFinnhubSymbol, useMarketSymbols } from "@/hooks/useMarketData";
 import { useOnChainTournaments } from "@/hooks/useOnChainTournaments";
@@ -55,6 +53,11 @@ export default function CreateTournamentPage() {
   const account = useCurrentAccount();
   const isAdmin = isCreateTournamentAdmin(account?.address);
   const [form, setForm] = useState<FormState>(() => initialFormState());
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
   const [txDigest, setTxDigest] = useState<string | null>(null);
   const [startTxDigest, setStartTxDigest] = useState<string | null>(null);
   const [startMessage, setStartMessage] = useState<string | null>(null);
@@ -74,12 +77,18 @@ export default function CreateTournamentPage() {
     [symbolsQuery.data],
   );
   const tournamentsQuery = useOnChainTournaments();
-  const tournaments = tournamentsQuery.data ?? [];
+  const tournaments = useMemo(() => tournamentsQuery.data ?? [], [tournamentsQuery.data]);
   const selectedCoinSymbol = useMemo(() => {
     const current = form.coinSymbol.toUpperCase();
     if (availableSymbols.includes(current)) return current;
     return availableSymbols[0] ?? current;
   }, [availableSymbols, form.coinSymbol]);
+  
+  const myTournaments = useMemo(() => {
+    if (!account?.address) return [];
+    const normalized = account.address.toLowerCase();
+    return tournaments.filter((t) => t.creatorAddress.toLowerCase() === normalized);
+  }, [tournaments, account]);
 
   const validation = useMemo(() => {
     const roundId = Number(form.roundId);
@@ -182,58 +191,7 @@ export default function CreateTournamentPage() {
       style={{ backgroundColor: "#0a0a0a" }}
       className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
-      <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-3xl"
-                style={{ color: "#0df280" }}
-              >
-                swords
-              </span>
-              <h1 className="text-lg font-black tracking-tighter uppercase italic">
-                GameFi <span style={{ color: "#0df280" }}>Arena</span>
-              </h1>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link
-                href="/tournaments"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Tournaments
-              </Link>
-              {isAdmin && (
-                <span
-                  className="text-sm font-bold uppercase tracking-wider"
-                  style={{
-                    color: "#0df280",
-                    borderBottom: "2px solid #0df280",
-                    paddingBottom: "2px",
-                  }}
-                >
-                  Create Tournaments
-                </span>
-              )}
-              <Link
-                href="/leaderboard"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                Leaderboard
-              </Link>
-              <Link
-                href="/profile"
-                className="text-sm font-semibold text-slate-400 hover:text-white transition-colors uppercase tracking-wider"
-              >
-                My Arena
-              </Link>
-            </nav>
-          </div>
-          <div className="flex items-center gap-3">
-            {account ? <WalletMenu /> : <ConnectButton />}
-          </div>
-        </div>
-      </nav>
+
 
       <main className="max-w-6xl mx-auto px-6 pt-28 pb-16">
         <div className="mb-8">
@@ -256,25 +214,7 @@ export default function CreateTournamentPage() {
           </div>
         )}
 
-        {account && !isAdmin && (
-          <div className="glass-panel rounded-2xl p-6">
-            <div
-              className="rounded-xl p-4"
-              style={{
-                backgroundColor: "rgba(255,77,77,0.1)",
-                border: "1px solid rgba(255,77,77,0.25)",
-              }}
-            >
-              <p className="text-sm font-bold text-red-300 mb-1">
-                Unauthorized wallet
-              </p>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                This wallet is not allowed to create tournaments. Ask admin to add your address to{" "}
-                <code>NEXT_PUBLIC_CREATE_TOURNAMENT_ADMINS</code>.
-              </p>
-            </div>
-          </div>
-        )}
+
 
         {account && isAdmin && (
           <div className="space-y-8">
@@ -517,11 +457,11 @@ export default function CreateTournamentPage() {
                 <p className="text-sm text-slate-400">Loading tournaments...</p>
               )}
 
-              {!tournamentsQuery.isLoading && tournaments.length === 0 && (
-                <p className="text-sm text-slate-400">No tournaments found on-chain.</p>
+              {!tournamentsQuery.isLoading && myTournaments.length === 0 && (
+                <p className="text-sm text-slate-400">You haven&apos;t created any tournaments yet.</p>
               )}
 
-              {!tournamentsQuery.isLoading && tournaments.length > 0 && (
+              {!tournamentsQuery.isLoading && myTournaments.length > 0 && (
                 <div className="overflow-x-auto rounded-xl">
                   <table className="w-full text-left">
                     <thead>
@@ -539,7 +479,7 @@ export default function CreateTournamentPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {tournaments.map((tournament) => (
+                      {myTournaments.map((tournament) => (
                         <tr
                           key={tournament.sessionId}
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
@@ -571,10 +511,10 @@ export default function CreateTournamentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-400">
-                            {formatDateTime(tournament.startTimeMs)}
+                            {mounted ? formatDateTime(tournament.startTimeMs) : "..."}
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-400">
-                            {formatDateTime(tournament.endTimeMs)}
+                            {mounted ? formatDateTime(tournament.endTimeMs) : "..."}
                           </td>
                           <td className="px-4 py-3 text-sm text-slate-300">
                             {tournament.totalParticipants}

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "@onelabs/dapp-kit/dist/index.css";
 import Providers from "./providers";
+import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
   title: "GameFi Prediction Arena | Lossless Crypto Battles",
@@ -30,7 +31,10 @@ export default function RootLayout({
         />
       </head>
       <body suppressHydrationWarning>
-        <Providers>{children}</Providers>
+        <Providers>
+          <Navbar />
+          {children}
+        </Providers>
       </body>
     </html>
   );
