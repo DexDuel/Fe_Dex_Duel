@@ -313,3 +313,156 @@
 .border-l-accent-blue { border-left-color: #3b82f6; }
 /* Leaderboard podium */
 .border-primary\/30 { border-color: rgba(13, 242, 128, 0.3); }
+
+/* ─── Live pulse badge ──────────────────────────────────────────── */
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13,242,128,0.5); }
+  50%       { box-shadow: 0 0 0 6px rgba(13,242,128,0); }
+}
+@keyframes liveDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.5); opacity: 0.7; }
+}
+.animate-live-pulse { animation: livePulse 1.8s ease-in-out infinite; }
+.animate-live-dot   { animation: liveDot 1.4s ease-in-out infinite; }
+
+/* ─── Card hover glow ───────────────────────────────────────────── */
+.tournament-card {
+  transition: transform 0.35s cubic-bezier(0.23,1,0.32,1),
+              box-shadow 0.35s ease,
+              border-color 0.35s ease;
+}
+.tournament-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 48px rgba(13,242,128,0.12),
+              0 0 0 1px rgba(13,242,128,0.2);
+}
+.tournament-card-live:hover {
+  box-shadow: 0 20px 48px rgba(13,242,128,0.18),
+              0 0 0 1px rgba(13,242,128,0.35);
+}
+
+/* ─── Vote bar fill animation ───────────────────────────────────── */
+@keyframes voteBarFill {
+  from { width: 0%; }
+}
+.animate-vote-bar { animation: voteBarFill 0.8s cubic-bezier(0.23,1,0.32,1) both; }
+
+/* ─── Page header gradient text ─────────────────────────────────── */
+@keyframes gradientShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.animate-gradient-text {
+  background-size: 200% 200%;
+  animation: gradientShift 4s ease infinite;
+}
+
+/* ─── Shimmer loading skeleton ──────────────────────────────────── */
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.05) 25%,
+    rgba(255,255,255,0.12) 50%,
+    rgba(255,255,255,0.05) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* ─── Card stagger entrance ─────────────────────────────────────── */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-card-enter {
+  animation: cardEnter 0.55s cubic-bezier(0.23,1,0.32,1) both;
+}
+
+/* ─── Leaderboard row slide-in ──────────────────────────────────── */
+@keyframes rowSlideIn {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-row-enter {
+  animation: rowSlideIn 0.45s cubic-bezier(0.23,1,0.32,1) both;
+}
+
+/* ─── Podium rise animation ─────────────────────────────────────── */
+@keyframes podiumRise {
+  from { opacity: 0; transform: translateY(40px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-podium { animation: podiumRise 0.7s cubic-bezier(0.23,1,0.32,1) both; }
+
+/* ─── Gold/Silver/Bronze glows ──────────────────────────────────── */
+@keyframes goldPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(250,204,21,0.25), 0 0 60px rgba(250,204,21,0.08); }
+  50%       { box-shadow: 0 0 50px rgba(250,204,21,0.5),  0 0 100px rgba(250,204,21,0.18); }
+}
+@keyframes silverPulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(203,213,225,0.2), 0 0 60px rgba(203,213,225,0.06); }
+  50%       { box-shadow: 0 0 50px rgba(203,213,225,0.4), 0 0 100px rgba(203,213,225,0.15); }
+}
+@keyframes bronzePulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(194,65,12,0.22),  0 0 60px rgba(194,65,12,0.07); }
+  50%       { box-shadow: 0 0 50px rgba(194,65,12,0.45),  0 0 100px rgba(194,65,12,0.16); }
+}
+.animate-gold-glow   { animation: goldPulse   2.5s ease-in-out infinite; }
+.animate-silver-glow { animation: silverPulse 2.5s ease-in-out infinite; }
+.animate-bronze-glow { animation: bronzePulse 2.5s ease-in-out infinite; }
+
+/* ─── Form field glow on focus ──────────────────────────────────── */
+.form-field-glow:focus {
+  border-color: rgba(13,242,128,0.5) !important;
+  box-shadow: 0 0 0 3px rgba(13,242,128,0.12), 0 0 16px rgba(13,242,128,0.1);
+  outline: none;
+}
+
+/* ─── Neon border flicker ───────────────────────────────────────── */
+@keyframes neonFlicker {
+  0%, 95%, 100% { opacity: 1; }
+  96%            { opacity: 0.6; }
+  97%            { opacity: 0.9; }
+  98%            { opacity: 0.5; }
+  99%            { opacity: 1; }
+}
+.animate-neon-flicker { animation: neonFlicker 5s step-end infinite; }
+
+/* ─── Join panel UP button pulse ────────────────────────────────── */
+@keyframes upGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(13,242,128,0.15); }
+  50%       { box-shadow: 0 0 40px rgba(13,242,128,0.4), 0 0 80px rgba(13,242,128,0.15); }
+}
+@keyframes downGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(239,68,68,0.15); }
+  50%       { box-shadow: 0 0 40px rgba(239,68,68,0.4), 0 0 80px rgba(239,68,68,0.15); }
+}
+.animate-up-glow   { animation: upGlow   2s ease-in-out infinite; }
+.animate-down-glow { animation: downGlow 2s ease-in-out infinite; }
+
+/* ─── Score bar fill ─────────────────────────────────────────────── */
+@keyframes scoreBarFill {
+  from { width: 0%; opacity: 0.5; }
+  to   { opacity: 1; }
+}
+.animate-score-bar { animation: scoreBarFill 1s cubic-bezier(0.23,1,0.32,1) both; }
+
+/* ─── Floating sparkle dots ─────────────────────────────────────── */
+@keyframes sparkleFloat {
+  0%   { transform: translateY(0px) scale(1);   opacity: 0.6; }
+  50%  { transform: translateY(-18px) scale(1.2); opacity: 1; }
+  100% { transform: translateY(0px) scale(1);   opacity: 0.6; }
+}
+
+/* ─── Countdown timer glitch ────────────────────────────────────── */
+@keyframes timerGlitch {
+  0%, 93%, 100% { clip-path: none; transform: translate(0,0); }
+  94%  { clip-path: inset(20% 0 60% 0); transform: translate(-2px, 1px); }
+  95%  { clip-path: inset(50% 0 20% 0); transform: translate(2px, -1px); }
+  96%  { clip-path: none; transform: translate(0,0); }
+}
+.animate-timer { animation: timerGlitch 8s step-end infinite; }
