@@ -35,6 +35,21 @@ export async function dispatchEvent(event: SuiEvent): Promise<void> {
         case EVENT_TYPES.RoundSettled:
             await handleRoundSettled(payload);
             break;
+        case EVENT_TYPES.TournamentCreated:
+            await handleTournamentCreated(payload);
+            break;
+        case EVENT_TYPES.TournamentStarted:
+            await handleTournamentStarted(payload);
+            break;
+        case EVENT_TYPES.TournamentEnded:
+            await handleTournamentEnded(payload);
+            break;
+        case EVENT_TYPES.TournamentSettled:
+            await handleTournamentSettled(payload);
+            break;
+        case EVENT_TYPES.TournamentCanceled:
+            await handleTournamentCanceled(payload);
+            break;
         case EVENT_TYPES.PredictionRecorded:
             await handlePredictionRecorded(payload, event);
             break;
@@ -60,41 +75,191 @@ export async function dispatchEvent(event: SuiEvent): Promise<void> {
 // Individual handlers
 // ────────────────────────────────────────────────────────────────────────────
 
+function toStringValue(value: unknown): string {
+    if (typeof value === "string") return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(Math.floor(value));
+    if (typeof value === "bigint") return value.toString();
+    return "";
+}
+
+function inferCoinSymbol(pairSymbol: string, fallback: string): string {
+    const trimmed = pairSymbol.trim();
+    if (trimmed.includes("/")) {
+        return trimmed.split("/")[0]?.trim().toUpperCase() || fallback;
+    }
+    return trimmed.toUpperCase() || fallback;
+}
+
 async function handleRoundCreated(p: Record<string, unknown>) {
     const roundId = toBigInt(p.round_id);
     const coinSymbol = decodeCoinSymbol(p.coin_symbol);
     const startTime = toDate(p.start_time);
     const endTime = toDate(p.end_time);
     const entryFee = toBigInt(p.entry_fee);
+    const chainRoundId = toStringValue(p.round_id) || roundId.toString();
+    const pairSymbol = coinSymbol || "UNKNOWN";
 
     await prisma.round.upsert({
-        where: { roundId },
-        create: { roundId, coinSymbol, startTime, endTime, entryFee, status: "PENDING" },
-        update: { coinSymbol, startTime, endTime, entryFee },
+        where: { chainRoundId },
+        create: {
+            chainRoundId,
+            roundId,
+            coinSymbol,
+            pairSymbol,
+            startTime,
+            endTime,
+            entryFee,
+            status: "UPCOMING",
+        },
+        update: { coinSymbol, pairSymbol, startTime, endTime, entryFee },
     });
 }
 
 async function handleRoundEnded(p: Record<string, unknown>) {
+    const chainRoundId = toStringValue(p.round_id);
     await prisma.round.updateMany({
-        where: { roundId: toBigInt(p.round_id) },
+        where: chainRoundId ? { chainRoundId } : { roundId: toBigInt(p.round_id) },
         data: {
             priceStart: toBigInt(p.price_start),
             priceEnd: toBigInt(p.price_end),
             winnerDir: toNumber(p.winner_direction),
-            status: "ENDED",
+            status: "FINISHED",
         },
     });
 }
 
 async function handleRoundSettled(p: Record<string, unknown>) {
+    const chainRoundId = toStringValue(p.round_id);
     await prisma.round.updateMany({
-        where: { roundId: toBigInt(p.round_id) },
+        where: chainRoundId ? { chainRoundId } : { roundId: toBigInt(p.round_id) },
         data: {
             totalYield: toBigInt(p.total_yield),
             adminFee: toBigInt(p.admin_fee),
             prizePool: toBigInt(p.prize_pool),
-            status: "SETTLED",
+            status: "FINISHED",
         },
+    });
+}
+
+async function handleTournamentCreated(p: Record<string, unknown>) {
+    const chainRoundId =
+        toStringValue(p.chain_round_id) ||
+        toStringValue(p.round_id) ||
+        toStringValue(p.roundId);
+    if (!chainRoundId) return;
+
+    const parsedRoundId = toBigInt(p.round_id);
+    const roundId =
+        parsedRoundId > 0n
+            ? parsedRoundId
+            : (() => {
+                try {
+                    return BigInt(chainRoundId);
+                } catch {
+                    return parsedRoundId;
+                }
+            })();
+    const pairSymbol =
+        toStringValue(p.pair_symbol) ||
+        toStringValue(p.pairSymbol) ||
+        decodeCoinSymbol(p.coin_symbol) ||
+        "UNKNOWN";
+    const coinSymbol = inferCoinSymbol(pairSymbol, decodeCoinSymbol(p.coin_symbol));
+    const startTime = toDate(p.start_time ?? p.startTime);
+    const endTime = toDate(p.end_time ?? p.endTime);
+    const entryFee = toBigInt(p.entry_fee ?? p.entryFee);
+    const seasonNoRaw = p.season_no ?? p.season_id ?? p.seasonNo;
+    const chainSeasonNo = seasonNoRaw === undefined || seasonNoRaw === null
+        ? null
+        : toBigInt(seasonNoRaw, BigInt(-1));
+
+    const seasonId =
+        chainSeasonNo !== null && chainSeasonNo >= 0n
+            ? (
+                await prisma.season.upsert({
+                    where: { chainSeasonNo },
+                    create: { chainSeasonNo },
+                    update: {},
+                    select: { id: true },
+                })
+            ).id
+            : null;
+
+    await prisma.round.upsert({
+        where: { chainRoundId },
+        create: {
+            chainRoundId,
+            roundId,
+            seasonId,
+            pairSymbol,
+            coinSymbol,
+            startTime,
+            endTime,
+            entryFee,
+            status: "UPCOMING",
+        },
+        update: {
+            roundId,
+            seasonId,
+            pairSymbol,
+            coinSymbol,
+            startTime,
+            endTime,
+            entryFee,
+            status: "UPCOMING",
+        },
+    });
+}
+
+async function handleTournamentStarted(p: Record<string, unknown>) {
+    const chainRoundId =
+        toStringValue(p.chain_round_id) ||
+        toStringValue(p.round_id) ||
+        toStringValue(p.roundId);
+    if (!chainRoundId) return;
+
+    await prisma.round.updateMany({
+        where: { chainRoundId },
+        data: { status: "LIVE" },
+    });
+}
+
+async function handleTournamentEnded(p: Record<string, unknown>) {
+    const chainRoundId =
+        toStringValue(p.chain_round_id) ||
+        toStringValue(p.round_id) ||
+        toStringValue(p.roundId);
+    if (!chainRoundId) return;
+
+    await prisma.round.updateMany({
+        where: { chainRoundId },
+        data: { status: "FINISHED" },
+    });
+}
+
+async function handleTournamentSettled(p: Record<string, unknown>) {
+    const chainRoundId =
+        toStringValue(p.chain_round_id) ||
+        toStringValue(p.round_id) ||
+        toStringValue(p.roundId);
+    if (!chainRoundId) return;
+
+    await prisma.round.updateMany({
+        where: { chainRoundId },
+        data: { status: "FINISHED" },
+    });
+}
+
+async function handleTournamentCanceled(p: Record<string, unknown>) {
+    const chainRoundId =
+        toStringValue(p.chain_round_id) ||
+        toStringValue(p.round_id) ||
+        toStringValue(p.roundId);
+    if (!chainRoundId) return;
+
+    await prisma.round.updateMany({
+        where: { chainRoundId },
+        data: { status: "CANCELED" },
     });
 }
 

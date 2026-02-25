@@ -31,18 +31,21 @@ export default function Navbar() {
     <>
       {/* Top accent gradient line */}
       <div
-        className="fixed top-0 left-0 right-0 z-50 h-[2px] pointer-events-none"
+        className="fixed top-0 left-3 right-3 sm:left-6 sm:right-6 z-50 h-[2px] rounded-full pointer-events-none"
         style={{
           background:
-            "linear-gradient(to right, transparent 0%, rgba(59,130,246,0) 10%, #3b82f6 35%, #06b6d4 65%, rgba(6,182,212,0) 90%, transparent 100%)",
+            "linear-gradient(to right, transparent 0%, rgba(59,130,246,0) 10%, rgba(59,130,246,0.92) 35%, rgba(34,211,238,0.92) 65%, rgba(6,182,212,0) 90%, transparent 100%)",
         }}
       />
 
       <nav
-        className="fixed top-[2px] left-0 right-0 z-50 backdrop-blur-xl"
+        className="fixed top-2 left-3 right-3 sm:left-6 sm:right-6 z-50 backdrop-blur-2xl rounded-2xl"
         style={{
-          backgroundColor: "rgba(2,8,23,0.92)",
-          borderBottom: "1px solid rgba(59,130,246,0.14)",
+          background:
+            "linear-gradient(120deg, rgba(2,8,23,0.94), rgba(15,23,42,0.9) 65%, rgba(14,28,52,0.92))",
+          border: "1px solid rgba(56,189,248,0.2)",
+          boxShadow:
+            "0 18px 40px rgba(2,8,23,0.45), inset 0 1px 0 rgba(148,163,184,0.08)",
         }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -104,23 +107,24 @@ export default function Navbar() {
                       active
                         ? {
                             color: "#fff",
-                            background: "rgba(59,130,246,0.12)",
-                            border: "1px solid rgba(59,130,246,0.28)",
+                            background:
+                              "linear-gradient(135deg, rgba(59,130,246,0.2), rgba(34,211,238,0.12))",
+                            border: "1px solid rgba(59,130,246,0.34)",
                           }
                         : {
-                            color: "#64748b",
+                            color: "#94a3b8",
                             border: "1px solid transparent",
                           }
                     }
                     onMouseEnter={e => {
                       if (!active) {
                         (e.currentTarget as HTMLElement).style.color = "#e2e8f0";
-                        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                        (e.currentTarget as HTMLElement).style.background = "rgba(148,163,184,0.12)";
                       }
                     }}
                     onMouseLeave={e => {
                       if (!active) {
-                        (e.currentTarget as HTMLElement).style.color = "#64748b";
+                        (e.currentTarget as HTMLElement).style.color = "#94a3b8";
                         (e.currentTarget as HTMLElement).style.background = "transparent";
                       }
                     }}
@@ -202,7 +206,27 @@ export default function Navbar() {
               {account ? (
                 <WalletMenu />
               ) : (
-                <ConnectButton />
+                <ConnectButton
+                  connectText={
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: 16, lineHeight: 1 }}
+                      >
+                        account_balance_wallet
+                      </span>
+                      Connect Wallet
+                    </span>
+                  }
+                  className="rounded-xl px-4 py-2 text-[13px] font-black tracking-wide transition-all"
+                  style={{
+                    background: "rgba(59,130,246,0.16)",
+                    color: "#e2e8f0",
+                    border: "1px solid rgba(59,130,246,0.42)",
+                    boxShadow:
+                      "0 10px 24px rgba(2,132,199,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
+                  }}
+                />
               )}
             </div>
 
@@ -211,8 +235,8 @@ export default function Navbar() {
               onClick={() => setMobileOpen(!mobileOpen)}
               className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg transition-all"
               style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(148,163,184,0.1)",
+                border: "1px solid rgba(59,130,246,0.25)",
               }}
             >
               {mobileOpen
@@ -228,7 +252,7 @@ export default function Navbar() {
             className="lg:hidden px-4 pb-5 pt-3"
             style={{
               borderTop: "1px solid rgba(59,130,246,0.12)",
-              background: "rgba(2,8,23,0.98)",
+              background: "rgba(2,8,23,0.9)",
             }}
           >
             <div className="flex flex-col gap-1 mb-4">
@@ -245,11 +269,12 @@ export default function Navbar() {
                       active
                         ? {
                             color: "#fff",
-                            background: "rgba(59,130,246,0.12)",
-                            border: "1px solid rgba(59,130,246,0.24)",
+                            background:
+                              "linear-gradient(135deg, rgba(59,130,246,0.2), rgba(34,211,238,0.12))",
+                            border: "1px solid rgba(59,130,246,0.3)",
                           }
                         : {
-                            color: "#64748b",
+                            color: "#94a3b8",
                             border: "1px solid transparent",
                           }
                     }

@@ -18,22 +18,6 @@ function formatAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-type AccountLike = {
-  address: string;
-  label?: string;
-  name?: string;
-  nickname?: string;
-  displayName?: string;
-  display_name?: string;
-  accountName?: string;
-  account_name?: string;
-  userName?: string;
-  username?: string;
-  profileName?: string;
-  profile_name?: string;
-  metadata?: Record<string, unknown>;
-};
-
 function normalizeAddress(address: string): string {
   return address.trim().toLowerCase();
 }
@@ -113,8 +97,14 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((value) => !value)}
-        className="px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:opacity-80 transition-all"
-        style={{ backgroundColor: "#0df280", color: "#0a0a0a" }}
+        className="px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:opacity-90 transition-all"
+        style={{
+          background: "rgba(59,130,246,0.16)",
+          color: "#e2e8f0",
+          border: "1px solid rgba(59,130,246,0.42)",
+          boxShadow:
+            "0 10px 24px rgba(2,132,199,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
+        }}
       >
         <span className="material-symbols-outlined text-sm leading-none">
           account_balance_wallet
@@ -129,8 +119,8 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
         <div
           className="absolute right-0 top-full mt-2 w-72 rounded-xl overflow-hidden z-[100] shadow-2xl animate-fade-in-up"
           style={{
-            backgroundColor: "#161b22",
-            border: "1px solid rgba(255,255,255,0.1)",
+            background: "linear-gradient(135deg, #0b1220, #111b2f)",
+            border: "1px solid rgba(59,130,246,0.25)",
           }}
         >
           <div className="px-4 py-3 border-b border-white/10">
@@ -143,7 +133,7 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
                 <button
                   onClick={handleCopy}
                   className="shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded transition-all hover:bg-white/10"
-                  style={{ color: copied ? "#0df280" : "#64748b" }}
+                  style={{ color: copied ? "#22d3ee" : "#64748b" }}
                 >
                   <span className="material-symbols-outlined text-xs leading-none">
                     {copied ? "check" : "content_copy"}
@@ -172,8 +162,9 @@ export function WalletMenu({ showCopy = true }: WalletMenuProps) {
                       style={
                         isActive
                           ? {
-                              backgroundColor: "rgba(13,242,128,0.12)",
-                              color: "#0df280",
+                              background:
+                                "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(34,211,238,0.16))",
+                              color: "#67e8f9",
                             }
                           : {
                               backgroundColor: "rgba(255,255,255,0.03)",

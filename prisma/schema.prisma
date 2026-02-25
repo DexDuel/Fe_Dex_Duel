@@ -8,10 +8,21 @@ datasource db {
 }
 
 enum RoundStatus {
-  PENDING
-  ACTIVE
-  ENDED
+  UPCOMING
+  LIVE
+  FINISHED
+  CANCELED
   SETTLED
+}
+
+model Season {
+  id            Int      @id @default(autoincrement())
+  seasonNo      Int      @unique @default(dbgenerated("nextval('season_no_seq')"))
+  chainSeasonNo BigInt?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rounds    Round[]
 }
 
 model ChainCursor {
@@ -36,8 +47,15 @@ model ChainEvent {
 }
 
 model Round {
-  id         String     @id @default(cuid())
-  roundId    BigInt     @unique
+  id           String     @id @default(cuid())
+  roundNo      Int        @unique @default(dbgenerated("nextval('round_no_seq')"))
+  chainRoundId String     @unique
+  roundId      BigInt     @unique
+
+  seasonId   Int?
+  season     Season?   @relation(fields: [seasonId], references: [id])
+
+  pairSymbol String
   coinSymbol String
   startTime  DateTime
   endTime    DateTime
@@ -53,7 +71,7 @@ model Round {
   adminFee   BigInt?
   prizePool  BigInt?
 
-  status     RoundStatus @default(PENDING)
+  status     RoundStatus @default(UPCOMING)
 
   // agregat (diupdate dari PredictionRecorded)
   upCount    Int @default(0)

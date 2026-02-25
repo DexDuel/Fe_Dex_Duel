@@ -8,8 +8,12 @@ type RoundLike = Round & {
 
 export type SerializedRound = {
   id: string;
+  roundNo: number | null;
+  chainRoundId: string;
   roundId: string;
+  seasonId: number | null;
   coinSymbol: string;
+  pairSymbol: string;
   startTime: string;
   endTime: string;
   entryFee: string;
@@ -35,8 +39,12 @@ export type SerializedRound = {
 export function serializeRound(round: RoundLike): SerializedRound {
   return {
     id: round.id,
+    roundNo: typeof (round as Round).roundNo === "number" ? (round as Round).roundNo : null,
+    chainRoundId: (round as Round).chainRoundId ?? round.roundId.toString(),
     roundId: round.roundId.toString(),
+    seasonId: typeof (round as Round).seasonId === "number" ? (round as Round).seasonId : null,
     coinSymbol: round.coinSymbol,
+    pairSymbol: (round as Round).pairSymbol ?? round.coinSymbol,
     startTime: round.startTime.toISOString(),
     endTime: round.endTime.toISOString(),
     entryFee: round.entryFee.toString(),

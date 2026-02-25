@@ -55,8 +55,40 @@ Fast frontend-facing REST endpoints powered by Prisma.
 - `GET /api/admin/tournaments?includeHidden=1`
 - `PATCH /api/admin/tournaments/[roundId]/hide`
 - `POST /api/admin/tournaments/validate`
+- `POST /api/admin/tournaments/create` (admin command: returns tx payload only)
+- `POST /api/admin/tournaments/[roundId]/cancel` (admin command: UPCOMING only, returns tx payload only)
 
 > **Note**: Because BigInt is not natively serializable in `Response.json()`, all `BigInt` database fields are converted to `.toString()` at the API layer.
+
+### Command Env Vars
+The admin command endpoints use these environment variables to build Move transaction payloads:
+- `DEXDUEL_PACKAGE_ID` (required)
+- `DEXDUEL_MODULE_NAME` (default: `dexduel`)
+- `DEXDUEL_CREATE_FN` (default: `create_tournament`)
+- `DEXDUEL_CANCEL_FN` (default: `cancel_tournament`)
+
+### New Columns (Non-Destructive)
+- `Round.chainRoundId` (unique on-chain ID mapping)
+- `Round.roundNo` (local, sequence-backed ordering for UI)
+- `Round.pairSymbol`
+- `Season.seasonNo` (local, sequence-backed ordering for UI)
+- `Season.chainSeasonNo` (optional on-chain season number)
+
+Sequences are created explicitly:
+- `season_no_seq`
+- `round_no_seq`
+
+Existing primary keys and relations are unchanged.
+
+### Migration Preflight Checks
+The `safe_offchain_ids` migration includes strict checks and will fail early if:
+- `Round.roundId` is NULL or duplicated (used to backfill `chainRoundId`)
+- `Round.coinSymbol` is NULL (would break `pairSymbol` NOT NULL)
+- `Round.onChainRoundId` (if present) contains duplicates
+- `Round.roundId` length is less than 3
+- `Round.onChainRoundId` (if present) length is less than 3
+
+If it fails, fix the data issues (or backfill a valid on-chain ID column) and re-run the migration.
 
 ---
 
