@@ -21,130 +21,271 @@ export default function Navbar() {
   );
 
   const navLinks = [
-    { href: "/tournaments", label: "Tournaments" },
-    { href: "/arena", label: "Create Tournaments" },
-    { href: "/leaderboard", label: "Leaderboard" },
-    { href: "/profile", label: "My Arena" },
+    { href: "/tournaments", label: "Tournaments",  icon: "trophy" },
+    { href: "/arena",       label: "Create",        icon: "add_circle" },
+    { href: "/leaderboard", label: "Leaderboard",  icon: "workspace_premium" },
+    { href: "/profile",     label: "My Arena",     icon: "person" },
   ];
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 glass-panel bg-[#0a0a0a]/80 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <span className="material-symbols-outlined text-3xl transition-transform group-hover:rotate-12" style={{ color: "#0df280" }}>
-              swords
-            </span>
-            <div className="flex flex-col leading-none">
-              <h1 className="text-sm font-black tracking-tighter uppercase italic text-white">
-                GameFi
-              </h1>
-              <h1 className="text-sm font-black tracking-tighter uppercase italic" style={{ color: "#0df280" }}>
-                Arena
-              </h1>
-            </div>
-          </Link>
+    <>
+      {/* Top accent gradient line */}
+      <div
+        className="fixed top-0 left-0 right-0 z-50 h-[2px] pointer-events-none"
+        style={{
+          background:
+            "linear-gradient(to right, transparent 0%, rgba(59,130,246,0) 10%, #3b82f6 35%, #06b6d4 65%, rgba(6,182,212,0) 90%, transparent 100%)",
+        }}
+      />
 
-          {/* Desktop Links */}
-          <nav className="hidden lg:flex items-center gap-6">
-            {navLinks.map(({ href, label }) => {
-              const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`text-[11px] font-black uppercase tracking-widest transition-all relative py-1 ${
-                    active ? "text-[#0df280]" : "text-slate-400 hover:text-white"
-                  }`}
+      <nav
+        className="fixed top-[2px] left-0 right-0 z-50 backdrop-blur-xl"
+        style={{
+          backgroundColor: "rgba(2,8,23,0.92)",
+          borderBottom: "1px solid rgba(59,130,246,0.14)",
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+
+          {/* ── Left: Logo + nav links ── */}
+          <div className="flex items-center gap-6">
+
+            {/* Logo */}
+            <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+              <div className="relative">
+                {/* Hover glow behind box */}
+                <div
+                  className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                  style={{ background: "rgba(59,130,246,0.35)", filter: "blur(10px)" }}
+                />
+                <div
+                  className="relative w-8 h-8 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(37,99,235,0.3), rgba(8,145,178,0.2))",
+                    border: "1px solid rgba(59,130,246,0.45)",
+                  }}
                 >
-                  {label}
-                  {active && (
-                    <span className="absolute bottom-[-2px] left-0 right-0 h-[2px] bg-[#0df280] rounded-full" />
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {account && mounted && (
-            <div className="hidden sm:flex items-center gap-3">
-              {/* Balance */}
-              <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                }}
-              >
-                <span className="material-symbols-outlined text-sm leading-none" style={{ color: "#0df280" }}>
-                  toll
+                  <span className="material-symbols-outlined" style={{ color: "#60a5fa", fontSize: 17 }}>
+                    swords
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col leading-none">
+                <span className="text-[13px] font-black tracking-tighter uppercase italic text-white leading-tight">
+                  DEX
                 </span>
-                <span className="text-slate-300">
-                  {balance ? `${balance.formatted} USDT` : "..."}
+                <span
+                  className="text-[13px] font-black tracking-tighter uppercase italic leading-tight"
+                  style={{
+                    background: "linear-gradient(135deg, #3b82f6, #06b6d4)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                  }}
+                >
+                  DUEL
                 </span>
               </div>
+            </Link>
 
-              {/* Faucet */}
-              <FaucetButton address={account.address} onSuccess={refetchBalance} />
-            </div>
-          )}
+            {/* Divider */}
+            <div className="hidden lg:block h-5 w-px" style={{ background: "rgba(255,255,255,0.08)" }} />
 
-          {/* Wallet Section */}
+            {/* Desktop nav */}
+            <nav className="hidden lg:flex items-center gap-1">
+              {navLinks.map(({ href, label, icon }) => {
+                const active =
+                  pathname === href || (href !== "/" && pathname.startsWith(href));
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="relative flex items-center gap-2 px-3.5 py-2 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all duration-200"
+                    style={
+                      active
+                        ? {
+                            color: "#fff",
+                            background: "rgba(59,130,246,0.12)",
+                            border: "1px solid rgba(59,130,246,0.28)",
+                          }
+                        : {
+                            color: "#64748b",
+                            border: "1px solid transparent",
+                          }
+                    }
+                    onMouseEnter={e => {
+                      if (!active) {
+                        (e.currentTarget as HTMLElement).style.color = "#e2e8f0";
+                        (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)";
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!active) {
+                        (e.currentTarget as HTMLElement).style.color = "#64748b";
+                        (e.currentTarget as HTMLElement).style.background = "transparent";
+                      }
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 14, color: active ? "#3b82f6" : "inherit" }}
+                    >
+                      {icon}
+                    </span>
+                    {label}
+                    {/* Active underline glow */}
+                    {active && (
+                      <span
+                        className="absolute bottom-0 left-3 right-3 h-px rounded-full pointer-events-none"
+                        style={{
+                          background: "linear-gradient(to right, transparent, #3b82f6, #06b6d4, transparent)",
+                        }}
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* ── Right: network + balance + wallet + mobile toggle ── */}
           <div className="flex items-center gap-2">
-            {account ? <WalletMenu /> : <ConnectButton />}
-          </div>
 
-          {/* Mobile Menu Toggle */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="lg:hidden p-2 text-slate-400 hover:text-white transition-colors"
-          >
-            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </div>
-      </div>
+            {/* OneChain live badge */}
+            <div
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shrink-0"
+              style={{
+                background: "rgba(13,242,128,0.06)",
+                border: "1px solid rgba(13,242,128,0.18)",
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full inline-block shrink-0 animate-pulse"
+                style={{ backgroundColor: "#0df280" }}
+              />
+              <span
+                className="text-[9px] font-black uppercase tracking-widest"
+                style={{ color: "#0df280" }}
+              >
+                OneChain
+              </span>
+            </div>
 
-      {/* Mobile Menu */}
-      {mobileOpen && (
-        <div className="lg:hidden border-t border-white/10 bg-[#0a0a0a] px-4 py-4 space-y-4 animate-in slide-in-from-top duration-200">
-          <div className="flex flex-col gap-1">
-            {navLinks.map(({ href, label }) => {
-              const active = pathname === href || (href !== "/" && pathname.startsWith(href));
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                    active 
-                      ? "bg-[#0df280]/10 text-[#0df280] border border-[#0df280]/20" 
-                      : "text-slate-400 hover:bg-white/5"
-                  }`}
+            {/* Balance + faucet (only when connected) */}
+            {account && mounted && (
+              <div className="hidden sm:flex items-center gap-2">
+                <div
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                  style={{
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
                 >
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-          
-          {account && (
-            <div className="pt-4 border-t border-white/5 space-y-3">
-              <div className="px-4 flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500">
-                <span>Balance</span>
-                <span className="text-[#0df280]">
-                  {balance ? `${balance.formatted} USDT` : "..."}
-                </span>
-              </div>
-              <div className="px-4">
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ color: "#3b82f6", fontSize: 13 }}
+                  >
+                    toll
+                  </span>
+                  <span className="text-[11px] font-black text-slate-300">
+                    {balance ? balance.formatted : "..."}
+                  </span>
+                  <span className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">
+                    USDT
+                  </span>
+                </div>
                 <FaucetButton address={account.address} onSuccess={refetchBalance} />
               </div>
+            )}
+
+            {/* Wallet connect / menu */}
+            <div className="flex items-center">
+              {account ? (
+                <WalletMenu />
+              ) : (
+                <ConnectButton />
+              )}
             </div>
-          )}
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg transition-all"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              {mobileOpen
+                ? <X size={16} className="text-slate-300" />
+                : <Menu size={16} className="text-slate-300" />}
+            </button>
+          </div>
         </div>
-      )}
-    </nav>
+
+        {/* ── Mobile menu ── */}
+        {mobileOpen && (
+          <div
+            className="lg:hidden px-4 pb-5 pt-3"
+            style={{
+              borderTop: "1px solid rgba(59,130,246,0.12)",
+              background: "rgba(2,8,23,0.98)",
+            }}
+          >
+            <div className="flex flex-col gap-1 mb-4">
+              {navLinks.map(({ href, label, icon }) => {
+                const active =
+                  pathname === href || (href !== "/" && pathname.startsWith(href));
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                    style={
+                      active
+                        ? {
+                            color: "#fff",
+                            background: "rgba(59,130,246,0.12)",
+                            border: "1px solid rgba(59,130,246,0.24)",
+                          }
+                        : {
+                            color: "#64748b",
+                            border: "1px solid transparent",
+                          }
+                    }
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 16, color: active ? "#3b82f6" : "inherit" }}
+                    >
+                      {icon}
+                    </span>
+                    {label}
+                  </Link>
+                );
+              })}
+            </div>
+
+            {account && (
+              <div
+                className="flex items-center justify-between px-2 pt-3"
+                style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}
+              >
+                <div className="flex items-center gap-2 text-xs font-black text-slate-400">
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 14, color: "#3b82f6" }}
+                  >
+                    toll
+                  </span>
+                  {balance ? `${balance.formatted} USDT` : "..."}
+                </div>
+                <FaucetButton address={account.address} onSuccess={refetchBalance} />
+              </div>
+            )}
+          </div>
+        )}
+      </nav>
+    </>
   );
 }

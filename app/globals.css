@@ -23,7 +23,7 @@
   *, *::before, *::after { box-sizing: border-box; padding: 0; margin: 0; }
 
   body {
-    background-color: #0a0a0a;
+    background-color: #020817;
     color: #f1f5f9;
     font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -71,6 +71,20 @@
     linear-gradient(to right, rgba(13, 242, 128, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(13, 242, 128, 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
+}
+
+/* ─── Blue cyber grid (new landing hero) ────────────────────────── */
+.blue-cyber-grid {
+  background-image:
+    linear-gradient(to right, rgba(59, 130, 246, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(59, 130, 246, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* ─── Hero orbit spin ───────────────────────────────────────────── */
+@keyframes heroSpin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 /* ─── Arena chart dot grid ──────────────────────────────────────── */
@@ -123,6 +137,173 @@
 .stat-number {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+}
+
+/* ─── Arena Portal: glowing ring pulse ─────────────────────────── */
+@keyframes ringGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 42px rgba(59,130,246,0.45),
+      0 0 84px rgba(59,130,246,0.18),
+      inset 0 0 36px rgba(59,130,246,0.07);
+  }
+  50% {
+    box-shadow:
+      0 0 70px rgba(59,130,246,0.75),
+      0 0 140px rgba(59,130,246,0.35),
+      inset 0 0 58px rgba(59,130,246,0.14);
+  }
+}
+.animate-ring-glow {
+  animation: ringGlow 3s ease-in-out infinite;
+}
+
+/* ─── Arena Portal: slow spinning decorative rings ──────────────── */
+@keyframes slowSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes slowSpinReverse {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+.animate-slow-spin         { animation: slowSpin        22s linear infinite; }
+.animate-slow-spin-reverse { animation: slowSpinReverse 14s linear infinite; }
+
+/* ─── Arena Portal: flowing dash on SVG lines ───────────────────── */
+@keyframes flowDash {
+  from { stroke-dashoffset: 40; }
+  to   { stroke-dashoffset:  0; }
+}
+
+/* ─── Hero button float ─────────────────────────────────────────── */
+@keyframes heroButtonFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-7px); }
+}
+@keyframes btnGlowPulse {
+  0%, 100% { box-shadow: 0 0 24px rgba(59,130,246,0.35), 0 4px 20px rgba(59,130,246,0.2); }
+  50%       { box-shadow: 0 0 44px rgba(59,130,246,0.7), 0 8px 36px rgba(6,182,212,0.3); }
+}
+
+/* ─── Hero background dots twinkle ──────────────────────────────── */
+@keyframes dotTwinkle {
+  0%, 100% { opacity: 0.15; transform: scale(1);   }
+  50%       { opacity: 1;    transform: scale(2.2); }
+}
+
+/* ─── Hero background blob pulse ────────────────────────────────── */
+@keyframes blobPulse {
+  0%, 100% { opacity: 1;    transform: scale(1);    }
+  50%       { opacity: 0.55; transform: scale(1.18); }
+}
+
+/* ─── Isometric block float animations ─────────────────────────── */
+@keyframes isoFloat1 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-14px); }
+}
+@keyframes isoFloat2 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-20px); }
+}
+@keyframes isoFloat3 {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-12px); }
+}
+
+/* ─── Battle card scan line ─────────────────────────────────────── */
+@keyframes battleScan {
+  0%   { transform: translateY(-2px);   opacity: 0;   }
+  8%   { opacity: 0.9; }
+  85%  { opacity: 0.4; }
+  100% { transform: translateY(380px); opacity: 0;   }
+}
+
+/* ─── Price flicker — simulates live data refresh ───────────────── */
+@keyframes priceFlicker {
+  0%,  87%, 91%, 100% { opacity: 1;   }
+  88% { opacity: 0.45; }
+  90% { opacity: 0.85; }
+}
+
+/* ─── Why DexDuel cards — float up/down animation ───────────────── */
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0px);    }
+  50%       { transform: translateY(-10px); }
+}
+/* hover overrides the float and does the lift instead */
+.why-card:hover {
+  animation-play-state: paused !important;
+}
+
+/* ─── Why DexDuel cards — modern hover effects ──────────────────── */
+.why-card {
+  transition: transform 0.38s cubic-bezier(0.23, 1, 0.32, 1),
+              box-shadow 0.38s ease,
+              border-color 0.38s ease !important;
+}
+.why-card:hover {
+  transform: translateY(-8px) !important;
+  box-shadow: 0 24px 52px rgba(59,130,246,0.2),
+              0 0 0 1px rgba(59,130,246,0.35) !important;
+  border-color: rgba(59,130,246,0.35) !important;
+}
+/* Background ambient glow reveal */
+.why-bg-glow {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.why-card:hover .why-bg-glow {
+  opacity: 1;
+}
+/* Corner decoration lines */
+.why-corner-h, .why-corner-v {
+  opacity: 0.22;
+  transition: opacity 0.38s ease;
+}
+.why-card:hover .why-corner-h,
+.why-card:hover .why-corner-v {
+  opacity: 1;
+}
+/* Icon ring pulse on hover */
+.why-icon-ring {
+  opacity: 0;
+}
+.why-card:hover .why-icon-ring {
+  animation: iconRingPulse 1.5s ease-out infinite;
+}
+@keyframes iconRingPulse {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  75%  { transform: scale(2.2); opacity: 0;   }
+  100% { transform: scale(2.2); opacity: 0;   }
+}
+/* Bottom accent bar slide-in */
+.why-bottom-bar {
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.48s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.why-card:hover .why-bottom-bar {
+  transform: scaleX(1);
+}
+
+/* ─── Legend row slide-in ───────────────────────────────────────── */
+@keyframes legendRowIn {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ─── Win-rate bar fill ─────────────────────────────────────────── */
+@keyframes fillBar {
+  from { width: 0%; }
+}
+
+/* ─── Stat counter pop ──────────────────────────────────────────── */
+@keyframes statPop {
+  0%   { opacity: 0; transform: scale(0.7) translateY(8px); }
+  70%  { transform: scale(1.08) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* ─── Explicit safe-list classes used dynamically ───────────────── */

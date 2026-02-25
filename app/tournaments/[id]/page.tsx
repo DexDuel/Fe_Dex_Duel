@@ -24,6 +24,7 @@ import {
 } from "@/lib/constants";
 import { FaucetButton } from "@/components/FaucetButton";
 import { CandlestickChart } from "@/components/CandlestickChart";
+import { CryptoIcon3D } from "@/components/CryptoIcon3D";
 
 type PickDirection = 1 | 2;
 
@@ -215,7 +216,7 @@ export default function TournamentDetailPage() {
   return (
     <div
       style={{ backgroundColor: "#0a0a0a" }}
-      className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
+      className="relative z-10 text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
 
 
@@ -320,18 +321,27 @@ export default function TournamentDetailPage() {
               <div className="xl:col-span-2 flex flex-col gap-6">
                 <div className="glass-panel rounded-2xl p-6">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
-                    <div>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">
-                        Live Market ({finnhubSymbol})
-                      </p>
-                      <p className="text-3xl font-black" style={{ color: "#0df280" }}>
-                        {quoteQuery.data ? `$${quoteQuery.data.c.toLocaleString()}` : "-"}
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {quoteQuery.data
-                          ? `24h high $${quoteQuery.data.h.toLocaleString()} - 24h low $${quoteQuery.data.l.toLocaleString()}`
-                          : "Waiting for quote feed"}
-                      </p>
+                    <div className="flex items-center gap-4">
+                      {/* 3D crypto coin icon */}
+                      {tournament.coinSymbol && (
+                        <CryptoIcon3D
+                          symbol={tournament.coinSymbol}
+                          size={68}
+                        />
+                      )}
+                      <div>
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">
+                          Live Market ({finnhubSymbol})
+                        </p>
+                        <p className="text-3xl font-black" style={{ color: "#0df280" }}>
+                          {quoteQuery.data ? `$${quoteQuery.data.c.toLocaleString()}` : "-"}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {quoteQuery.data
+                            ? `24h high $${quoteQuery.data.h.toLocaleString()} - 24h low $${quoteQuery.data.l.toLocaleString()}`
+                            : "Waiting for quote feed"}
+                        </p>
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">
