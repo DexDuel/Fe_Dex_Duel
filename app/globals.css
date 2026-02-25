@@ -139,6 +139,43 @@
   font-feature-settings: "tnum";
 }
 
+/* ─── Arena Portal: glowing ring pulse ─────────────────────────── */
+@keyframes ringGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 42px rgba(59,130,246,0.45),
+      0 0 84px rgba(59,130,246,0.18),
+      inset 0 0 36px rgba(59,130,246,0.07);
+  }
+  50% {
+    box-shadow:
+      0 0 70px rgba(59,130,246,0.75),
+      0 0 140px rgba(59,130,246,0.35),
+      inset 0 0 58px rgba(59,130,246,0.14);
+  }
+}
+.animate-ring-glow {
+  animation: ringGlow 3s ease-in-out infinite;
+}
+
+/* ─── Arena Portal: slow spinning decorative rings ──────────────── */
+@keyframes slowSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes slowSpinReverse {
+  from { transform: rotate(360deg); }
+  to   { transform: rotate(0deg); }
+}
+.animate-slow-spin         { animation: slowSpin        22s linear infinite; }
+.animate-slow-spin-reverse { animation: slowSpinReverse 14s linear infinite; }
+
+/* ─── Arena Portal: flowing dash on SVG lines ───────────────────── */
+@keyframes flowDash {
+  from { stroke-dashoffset: 40; }
+  to   { stroke-dashoffset:  0; }
+}
+
 /* ─── Explicit safe-list classes used dynamically ───────────────── */
 /* Landing page battle cards */
 .border-l-primary   { border-left-color: #0df280; }
