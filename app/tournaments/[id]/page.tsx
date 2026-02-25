@@ -216,7 +216,7 @@ export default function TournamentDetailPage() {
   return (
     <div
       style={{ backgroundColor: "#0a0a0a" }}
-      className="text-slate-100 antialiased min-h-screen overflow-x-hidden"
+      className="relative z-10 text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
 
 

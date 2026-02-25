@@ -165,10 +165,13 @@ function Particles() {
    Arm material — metallic silver; blue lights create the tint
 ───────────────────────────────────────────────────────────────── */
 const armMat = new MeshPhysicalMaterial({
-  color:     new Color("#9ab8d0"),
-  metalness: 1.0,
-  roughness: 0.35,
-  side:      DoubleSide,
+  color:       new Color("#6090c0"),
+  metalness:   0.7,
+  roughness:   0.5,
+  transparent: true,
+  opacity:     0.2,
+  side:        DoubleSide,
+  depthWrite:  false,
 });
 
 /* ─────────────────────────────────────────────────────────────────
