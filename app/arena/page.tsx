@@ -10,7 +10,6 @@ import { useStartRound } from "@/hooks/useStartRound";
 import { EXPLORER_BASE, isCreateTournamentAdmin } from "@/lib/constants";
 
 type FormState = {
-  roundId: string;
   seasonId: string;
   coinSymbol: string;
   entryFeeRaw: string;
@@ -31,7 +30,6 @@ function initialFormState(): FormState {
   const start = new Date(now.getTime() + 10 * 60 * 1000);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   return {
-    roundId: "1",
     seasonId: "1",
     coinSymbol: "BTC",
     entryFeeRaw: "100000000",
@@ -166,18 +164,20 @@ export default function CreateTournamentPage() {
   const myTournaments = useMemo(() => {
     if (!account?.address) return [];
     const normalized = account.address.toLowerCase();
-    return tournaments.filter((t) => t.creatorAddress.toLowerCase() === normalized);
+    return tournaments.filter(
+      (t) =>
+        t.creatorAddress.toLowerCase() === normalized &&
+        t.status !== "cancelled"
+    );
   }, [tournaments, account]);
 
   const validation = useMemo(() => {
-    const roundId = Number(form.roundId);
     const seasonId = Number(form.seasonId);
     const entryFeeRaw = Number(form.entryFeeRaw);
     const minParticipants = Number(form.minParticipants);
     const earlyWindowMinutes = Number(form.earlyWindowMinutes);
     const startTimeMs = parseDateInput(form.startTime);
     const endTimeMs = parseDateInput(form.endTime);
-    if (!Number.isFinite(roundId) || roundId <= 0) return "Round ID must be greater than 0";
     if (!Number.isFinite(seasonId) || seasonId <= 0) return "Season ID must be greater than 0";
     if (!form.coinSymbol.trim()) return "Coin symbol is required";
     if (!Number.isFinite(entryFeeRaw) || entryFeeRaw <= 0) return "Entry fee must be greater than 0";
@@ -192,7 +192,7 @@ export default function CreateTournamentPage() {
     event.preventDefault();
     if (!account || !isAdmin || validation) return;
     const result = await createTournament({
-      roundId: Number(form.roundId),
+      roundId: Date.now(),
       seasonId: Number(form.seasonId),
       coinSymbol: selectedCoinSymbol,
       startTimeMs: parseDateInput(form.startTime),
@@ -397,16 +397,6 @@ export default function CreateTournamentPage() {
 
               <form onSubmit={onSubmit} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <FormField label="Round ID">
-                    <input
-                      type="number"
-                      min={1}
-                      value={form.roundId}
-                      onChange={(e) => setForm((prev) => ({ ...prev, roundId: e.target.value }))}
-                      className="form-field-glow"
-                      style={inputStyle}
-                    />
-                  </FormField>
 
                   <FormField label="Season ID">
                     <input

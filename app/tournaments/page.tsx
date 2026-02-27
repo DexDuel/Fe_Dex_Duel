@@ -421,7 +421,8 @@ export default function TournamentsPage() {
   const tournaments = useMemo(() => tournamentsQuery.data ?? [], [tournamentsQuery.data]);
   const filteredTournaments = useMemo(() => {
     return tournaments.filter((t) => {
-      const statusMatch = statusFilter === "all" || t.status === statusFilter;
+      const statusMatch =
+        statusFilter === "all" ? t.status !== "cancelled" : t.status === statusFilter;
       const searchMatch =
         t.coinSymbol.toLowerCase().includes(search.toLowerCase()) ||
         String(t.roundNumber).includes(search);

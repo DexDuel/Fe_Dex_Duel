@@ -27,7 +27,7 @@ export async function dispatchEvent(event: SuiEvent): Promise<void> {
 
     switch (event.type) {
         case EVENT_TYPES.RoundCreated:
-            await handleRoundCreated(payload);
+            await handleRoundCreated(payload, event);
             break;
         case EVENT_TYPES.RoundEnded:
             await handleRoundEnded(payload);
@@ -36,7 +36,7 @@ export async function dispatchEvent(event: SuiEvent): Promise<void> {
             await handleRoundSettled(payload);
             break;
         case EVENT_TYPES.TournamentCreated:
-            await handleTournamentCreated(payload);
+            await handleTournamentCreated(payload, event);
             break;
         case EVENT_TYPES.TournamentStarted:
             await handleTournamentStarted(payload);
@@ -47,8 +47,8 @@ export async function dispatchEvent(event: SuiEvent): Promise<void> {
         case EVENT_TYPES.TournamentSettled:
             await handleTournamentSettled(payload);
             break;
-        case EVENT_TYPES.TournamentCanceled:
-            await handleTournamentCanceled(payload);
+        case EVENT_TYPES.TournamentCancelled:
+            await handleTournamentCancelled(payload);
             break;
         case EVENT_TYPES.PredictionRecorded:
             await handlePredictionRecorded(payload, event);
@@ -90,35 +90,45 @@ function inferCoinSymbol(pairSymbol: string, fallback: string): string {
     return trimmed.toUpperCase() || fallback;
 }
 
-async function handleRoundCreated(p: Record<string, unknown>) {
-    const roundId = toBigInt(p.round_id);
+async function handleRoundCreated(p: Record<string, unknown>, event: SuiEvent) {
+    const roundAddress = toStringValue(p.round_address || p.round_id); // Primary link: Object Address
+    const chainRoundId = toBigInt(p.round_id); // Numeric reference
     const coinSymbol = decodeCoinSymbol(p.coin_symbol);
     const startTime = toDate(p.start_time);
     const endTime = toDate(p.end_time);
     const entryFee = toBigInt(p.entry_fee);
-    const chainRoundId = toStringValue(p.round_id) || roundId.toString();
     const pairSymbol = coinSymbol || "UNKNOWN";
+    const ownerAddress = event.sender;
 
     await prisma.round.upsert({
-        where: { chainRoundId },
+        where: { roundId: roundAddress },
         create: {
-            chainRoundId,
-            roundId,
+            roundId: roundAddress,
+            chainRoundId: chainRoundId,
             coinSymbol,
             pairSymbol,
             startTime,
             endTime,
             entryFee,
             status: "UPCOMING",
+            ownerAddress,
         },
-        update: { coinSymbol, pairSymbol, startTime, endTime, entryFee },
+        update: { 
+            chainRoundId: chainRoundId, 
+            coinSymbol, 
+            pairSymbol, 
+            startTime, 
+            endTime, 
+            entryFee, 
+            ownerAddress 
+        },
     });
 }
 
 async function handleRoundEnded(p: Record<string, unknown>) {
-    const chainRoundId = toStringValue(p.round_id);
+    const chainRoundId = toBigInt(p.round_id);
     await prisma.round.updateMany({
-        where: chainRoundId ? { chainRoundId } : { roundId: toBigInt(p.round_id) },
+        where: { chainRoundId },
         data: {
             priceStart: toBigInt(p.price_start),
             priceEnd: toBigInt(p.price_end),
@@ -129,9 +139,9 @@ async function handleRoundEnded(p: Record<string, unknown>) {
 }
 
 async function handleRoundSettled(p: Record<string, unknown>) {
-    const chainRoundId = toStringValue(p.round_id);
+    const chainRoundId = toBigInt(p.round_id);
     await prisma.round.updateMany({
-        where: chainRoundId ? { chainRoundId } : { roundId: toBigInt(p.round_id) },
+        where: { chainRoundId },
         data: {
             totalYield: toBigInt(p.total_yield),
             adminFee: toBigInt(p.admin_fee),
@@ -141,24 +151,10 @@ async function handleRoundSettled(p: Record<string, unknown>) {
     });
 }
 
-async function handleTournamentCreated(p: Record<string, unknown>) {
-    const chainRoundId =
-        toStringValue(p.chain_round_id) ||
-        toStringValue(p.round_id) ||
-        toStringValue(p.roundId);
-    if (!chainRoundId) return;
-
-    const parsedRoundId = toBigInt(p.round_id);
-    const roundId =
-        parsedRoundId > 0n
-            ? parsedRoundId
-            : (() => {
-                try {
-                    return BigInt(chainRoundId);
-                } catch {
-                    return parsedRoundId;
-                }
-            })();
+async function handleTournamentCreated(p: Record<string, unknown>, event: SuiEvent) {
+    const roundAddress = toStringValue(p.round_address || p.round_id);
+    const chainRoundId = toBigInt(p.round_id);
+    
     const pairSymbol =
         toStringValue(p.pair_symbol) ||
         toStringValue(p.pairSymbol) ||
@@ -186,10 +182,10 @@ async function handleTournamentCreated(p: Record<string, unknown>) {
             : null;
 
     await prisma.round.upsert({
-        where: { chainRoundId },
+        where: { roundId: roundAddress },
         create: {
-            chainRoundId,
-            roundId,
+            roundId: roundAddress,
+            chainRoundId: chainRoundId,
             seasonId,
             pairSymbol,
             coinSymbol,
@@ -197,9 +193,10 @@ async function handleTournamentCreated(p: Record<string, unknown>) {
             endTime,
             entryFee,
             status: "UPCOMING",
+            ownerAddress: event.sender,
         },
         update: {
-            roundId,
+            chainRoundId: chainRoundId,
             seasonId,
             pairSymbol,
             coinSymbol,
@@ -207,17 +204,13 @@ async function handleTournamentCreated(p: Record<string, unknown>) {
             endTime,
             entryFee,
             status: "UPCOMING",
+            ownerAddress: event.sender,
         },
     });
 }
 
 async function handleTournamentStarted(p: Record<string, unknown>) {
-    const chainRoundId =
-        toStringValue(p.chain_round_id) ||
-        toStringValue(p.round_id) ||
-        toStringValue(p.roundId);
-    if (!chainRoundId) return;
-
+    const chainRoundId = toBigInt(p.round_id || p.roundId || p.chain_round_id);
     await prisma.round.updateMany({
         where: { chainRoundId },
         data: { status: "LIVE" },
@@ -225,12 +218,7 @@ async function handleTournamentStarted(p: Record<string, unknown>) {
 }
 
 async function handleTournamentEnded(p: Record<string, unknown>) {
-    const chainRoundId =
-        toStringValue(p.chain_round_id) ||
-        toStringValue(p.round_id) ||
-        toStringValue(p.roundId);
-    if (!chainRoundId) return;
-
+    const chainRoundId = toBigInt(p.round_id || p.roundId || p.chain_round_id);
     await prisma.round.updateMany({
         where: { chainRoundId },
         data: { status: "FINISHED" },
@@ -238,25 +226,15 @@ async function handleTournamentEnded(p: Record<string, unknown>) {
 }
 
 async function handleTournamentSettled(p: Record<string, unknown>) {
-    const chainRoundId =
-        toStringValue(p.chain_round_id) ||
-        toStringValue(p.round_id) ||
-        toStringValue(p.roundId);
-    if (!chainRoundId) return;
-
+    const chainRoundId = toBigInt(p.round_id || p.roundId || p.chain_round_id);
     await prisma.round.updateMany({
         where: { chainRoundId },
         data: { status: "FINISHED" },
     });
 }
 
-async function handleTournamentCanceled(p: Record<string, unknown>) {
-    const chainRoundId =
-        toStringValue(p.chain_round_id) ||
-        toStringValue(p.round_id) ||
-        toStringValue(p.roundId);
-    if (!chainRoundId) return;
-
+async function handleTournamentCancelled(p: Record<string, unknown>) {
+    const chainRoundId = toBigInt(p.round_id || p.roundId || p.chain_round_id);
     await prisma.round.updateMany({
         where: { chainRoundId },
         data: { status: "CANCELED" },
@@ -267,7 +245,7 @@ async function handlePredictionRecorded(
     p: Record<string, unknown>,
     event: SuiEvent,
 ) {
-    const roundId = toBigInt(p.round_id);
+    const roundAddress = toStringValue(p.round_address || p.round_id);
     const player = toPlayer(p.player);
     if (!player) return;
 
@@ -278,20 +256,20 @@ async function handlePredictionRecorded(
     const txDigest = event.id.txDigest;
 
     await prisma.prediction.upsert({
-        where: { roundId_player: { roundId, player } },
-        create: { roundId, player, direction, stakeRaw, time, isEarly, txDigest },
+        where: { roundId_player: { roundId: roundAddress, player } },
+        create: { roundId: roundAddress, player, direction, stakeRaw, time, isEarly, txDigest },
         update: { direction, stakeRaw, time, isEarly },
     });
 
-    // Recompute aggregates for this round from the Prediction table (safe for any ordering)
+    // Recompute aggregates for this round from the Prediction table
     const [upAgg, downAgg] = await Promise.all([
         prisma.prediction.aggregate({
-            where: { roundId, direction: 1 },
+            where: { roundId: roundAddress, direction: 1 },
             _count: { id: true },
             _sum: { stakeRaw: true },
         }),
         prisma.prediction.aggregate({
-            where: { roundId, direction: 2 },
+            where: { roundId: roundAddress, direction: 2 },
             _count: { id: true },
             _sum: { stakeRaw: true },
         }),
@@ -303,7 +281,7 @@ async function handlePredictionRecorded(
     const totalDownStake = downAgg._sum.stakeRaw ?? BigInt(0);
 
     await prisma.round.updateMany({
-        where: { roundId },
+        where: { roundId: roundAddress },
         data: {
             upCount,
             downCount,
@@ -315,12 +293,11 @@ async function handlePredictionRecorded(
 }
 
 async function handlePredictionResultSet(p: Record<string, unknown>) {
-    const roundId = toBigInt(p.round_id);
     const player = toPlayer(p.player);
     if (!player) return;
 
     await prisma.prediction.updateMany({
-        where: { roundId, player },
+        where: { roundId: toStringValue(p.round_address || p.round_id), player },
         data: {
             isCorrect: p.is_correct === true || p.is_correct === "true",
             rank: toNumber(p.rank),
@@ -332,7 +309,6 @@ async function handleRewardClaimed(
     p: Record<string, unknown>,
     event: SuiEvent,
 ) {
-    const roundId = toBigInt(p.round_id);
     const player = toPlayer(p.player);
     if (!player) return;
 
@@ -341,9 +317,9 @@ async function handleRewardClaimed(
         : new Date();
 
     await prisma.rewardClaim.upsert({
-        where: { roundId_player: { roundId, player } },
+        where: { roundId_player: { roundId: toStringValue(p.round_address || p.round_id), player } },
         create: {
-            roundId,
+            roundId: toStringValue(p.round_address || p.round_id),
             player,
             principal: toBigInt(p.principal),
             reward: toBigInt(p.reward),

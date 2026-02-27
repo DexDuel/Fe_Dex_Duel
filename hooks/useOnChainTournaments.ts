@@ -161,9 +161,16 @@ function parseRound(roundData: SuiObjectData): ParsedRound | null {
   if (!isRecord(content.fields)) return null;
 
   const fields = content.fields as Record<string, unknown>;
-  const status = isRecord(fields["status"])
-    ? (fields["status"] as Record<string, unknown>)
+  const rawStatus = fields["status"];
+  const statusFields = isRecord(rawStatus)
+    ? (isRecord(rawStatus.fields) ? (rawStatus.fields as Record<string, unknown>) : (rawStatus as Record<string, unknown>))
     : {};
+
+  function readBool(obj: Record<string, unknown>, key: string): boolean {
+    const val = obj[key];
+    if (val === undefined || val === null) return false;
+    return toBoolean(val);
+  }
 
   return {
     roundNumber: toNumber(fields["round_id"]),
@@ -178,10 +185,10 @@ function parseRound(roundData: SuiObjectData): ParsedRound | null {
     yieldPoolRaw: readBalanceValue(fields["yield_pool"]),
     winnerDirection: toNumber(fields["winner_direction"]),
     minParticipants: toNumber(fields["min_participants"]),
-    isActive: toBoolean(status["is_active"]),
-    isEnded: toBoolean(status["is_ended"]),
-    isSettled: toBoolean(status["is_settled"]),
-    isCancelled: toBoolean(status["is_cancelled"]),
+    isActive: readBool(statusFields, "is_active") || readBool(statusFields, "isActive"),
+    isEnded: readBool(statusFields, "is_ended") || readBool(statusFields, "isEnded"),
+    isSettled: readBool(statusFields, "is_settled") || readBool(statusFields, "isSettled"),
+    isCancelled: readBool(statusFields, "is_cancelled") || readBool(statusFields, "isCancelled"),
   };
 }
 

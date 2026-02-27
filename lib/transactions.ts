@@ -107,7 +107,6 @@ export function buildCreateTournamentTx(
   tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::create_game_session`,
     arguments: [
-      tx.object(OBJECT_IDS.ADMIN_CAP),
       tx.pure.u64(params.roundId),
       tx.pure.u64(params.seasonId),
       tx.pure.vector("u8", toAsciiBytes(params.coinSymbol.toUpperCase())),
@@ -115,7 +114,8 @@ export function buildCreateTournamentTx(
       tx.pure.u64(params.endTimeMs),
       tx.pure.u64(params.entryFeeRaw),
       tx.pure.u64(params.minParticipants),
-      tx.pure.u64(params.earlyWindowMinutes),
+      tx.pure.u64(params.earlyWindowMinutes), // Tambahkan ini
+      tx.pure.u64(params.earlyWindowMinutes), // Gunakan nilai yang sama untuk max window sebagai default
     ],
   });
 
@@ -169,7 +169,6 @@ export function buildCancelTournamentTx(params: CancelTournamentParams): Transac
   tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::cancel_tournament`,
     arguments: [
-      tx.object(OBJECT_IDS.ADMIN_CAP),
       tx.object(params.sessionId),
       tx.object(params.roundId),
       tx.object(OBJECT_IDS.CLOCK),

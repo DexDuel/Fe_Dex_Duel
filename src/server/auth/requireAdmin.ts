@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { hasAdminAllowlist, isAdmin } from "./adminAllowlist";
+import { isAdmin } from "./adminAllowlist";
 import { getSessionFromRequest } from "./session";
 
 type AdminCheck =
@@ -14,9 +14,6 @@ export function getAdminAddress(req: NextRequest): string | null {
 }
 
 export function requireAdmin(req: NextRequest): AdminCheck {
-  if (!hasAdminAllowlist()) {
-    return { ok: false, status: 500, error: "ADMIN_ADDRESSES is not configured" };
-  }
   if (!process.env.ADMIN_SESSION_SECRET) {
     return { ok: false, status: 500, error: "ADMIN_SESSION_SECRET is not configured" };
   }

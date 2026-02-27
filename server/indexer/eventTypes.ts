@@ -21,7 +21,7 @@ export const EVENT_TYPES = {
     TournamentStarted: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentStarted`,
     TournamentEnded: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentEnded`,
     TournamentSettled: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentSettled`,
-    TournamentCanceled: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentCanceled`,
+    TournamentCancelled: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentCancelled`,
 } as const;
 
 export type EventTypeName = keyof typeof EVENT_TYPES;

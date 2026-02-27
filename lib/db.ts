@@ -1,10 +1,15 @@
+import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 
-// Prisma v7 requires an explicit driver adapter.
-// We use @prisma/adapter-pg which wraps the `pg` pool.
+// Prisma v7 requires a driver adapter — the native engine is no longer supported.
 function createPrismaClient() {
-    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+        throw new Error("DATABASE_URL is not defined in environment variables");
+    }
+    const pool = new Pool({ connectionString });
+    const adapter = new PrismaPg(pool);
     return new PrismaClient({
         adapter,
         log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
