@@ -6,8 +6,8 @@
  */
 
 import type { SuiEvent } from "@onelabs/sui/client";
-import { prisma } from "@/lib/db";
-import { EVENT_TYPES } from "./eventTypes";
+import { prisma } from "../../lib/db.ts";
+import { EVENT_TYPES } from "./eventTypes.ts";
 import {
     decodeCoinSymbol,
     isRecord,
@@ -15,7 +15,7 @@ import {
     toDate,
     toNumber,
     toPlayer,
-} from "./utils";
+} from "./utils.ts";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Dispatcher

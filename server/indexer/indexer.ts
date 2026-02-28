@@ -16,9 +16,9 @@
 import "dotenv/config";
 
 import type { EventId } from "@onelabs/sui/client";
-import { chainClient, MODULES_TO_POLL, PACKAGE_ID, type PolledModule } from "./chainClient";
-import { dispatchEvent } from "./handlers";
-import { prisma } from "@/lib/db";
+import { chainClient, MODULES_TO_POLL, PACKAGE_ID, type PolledModule } from "./chainClient.ts";
+import { dispatchEvent } from "./handlers.ts";
+import { prisma } from "../../lib/db.ts";
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -27,6 +27,10 @@ const POLL_INTERVAL_MS = Math.max(
     Number(process.env.INDEXER_POLL_INTERVAL_MS ?? 5_000),
 );
 const PAGE_LIMIT = 50; // events per RPC page (max 50 for most nodes)
+const DB_ERROR_LOG_INTERVAL_MS = 60_000;
+
+let hasLoggedDbUnavailable = false;
+let lastDbErrorLogAt = 0;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -140,6 +144,30 @@ async function pollModule(mod: PolledModule): Promise<void> {
 // ─── Main loop ────────────────────────────────────────────────────────────────
 
 async function runCycle(): Promise<void> {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        if (hasLoggedDbUnavailable) {
+            console.log("[indexer] Database connection restored. Resuming event polling.");
+            hasLoggedDbUnavailable = false;
+        }
+    } catch (err) {
+        const now = Date.now();
+        if (!hasLoggedDbUnavailable || now - lastDbErrorLogAt >= DB_ERROR_LOG_INTERVAL_MS) {
+            const message =
+                err instanceof Error
+                    ? err.message
+                    : typeof err === "string"
+                      ? err
+                      : "Unknown database error";
+            console.error(
+                `[indexer] Database unavailable; skipping poll cycles. Last error: ${message}`,
+            );
+            hasLoggedDbUnavailable = true;
+            lastDbErrorLogAt = now;
+        }
+        return;
+    }
+
     for (const mod of MODULES_TO_POLL) {
         try {
             await pollModule(mod);

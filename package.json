@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "indexer:dev": "tsx server/indexer/indexer.ts"
+    "prisma:generate:client": "prisma generate --generator client",
+    "preindexer:dev": "prisma generate --generator client",
+    "indexer:dev": "node scripts/run-indexer-dev.cjs",
+    "indexer:dev:tsx": "tsx server/indexer/indexer.ts"
   },
   "dependencies": {
     "@onelabs/dapp-kit": "^0.15.6",

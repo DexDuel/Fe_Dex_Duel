@@ -1,4 +1,4 @@
-import { DEXDUEL_MODULE, PACKAGE_ID } from "./chainClient";
+import { DEXDUEL_MODULE, PACKAGE_ID } from "./chainClient.ts";
 
 /**
  * Full qualified Move event types emitted by the DexDuel smart contract.
