@@ -1,6 +1,5 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -17,7 +16,7 @@ enum RoundStatus {
 
 model Season {
   id            Int      @id @default(autoincrement())
-  seasonNo      Int      @unique @default(dbgenerated("nextval('season_no_seq')"))
+  seasonNo      Int      @unique @default(autoincrement())
   chainSeasonNo BigInt?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -48,9 +47,13 @@ model ChainEvent {
 
 model Round {
   id           String     @id @default(cuid())
-  roundNo      Int        @unique @default(dbgenerated("nextval('round_no_seq')"))
-  chainRoundId String     @unique
-  roundId      BigInt     @unique
+  roundNo      Int        @unique @default(autoincrement())
+  
+  // Object Address on blockchain (0x...)
+  roundId      String     @unique 
+  
+  // The u64 ID from smart contract (optional reference)
+  chainRoundId BigInt?    
 
   seasonId   Int?
   season     Season?   @relation(fields: [seasonId], references: [id])
@@ -87,6 +90,7 @@ model Round {
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  ownerAddress String?
 
   predictions Prediction[]
   claims      RewardClaim[]
@@ -96,7 +100,7 @@ model Round {
 
 model Prediction {
   id        String  @id @default(cuid())
-  roundId   BigInt
+  roundId   String
   player    String
   direction Int     // 1 UP, 2 DOWN
   stakeRaw  BigInt
@@ -120,7 +124,7 @@ model Prediction {
 
 model RewardClaim {
   id        String  @id @default(cuid())
-  roundId   BigInt
+  roundId   String
   player    String
   principal BigInt
   reward    BigInt

@@ -1,5 +1,5 @@
 import { SuiClient } from "@onelabs/sui/client";
-import { getDexDuelConfig } from "@/lib/config";
+import { getDexDuelConfig } from "../../lib/config.ts";
 
 const fallbackPackageId =
     "0x24a6e095d2ebbfcfc4491f93e1bbb68ebef3e16740e90dfcc290d2feefe6ce6b";
@@ -10,7 +10,9 @@ export const PACKAGE_ID = packageId || fallbackPackageId;
 export const DEXDUEL_MODULE = moduleName || "dexduel";
 
 export const CHAIN_RPC =
-    process.env.NEXT_PUBLIC_CHAIN_RPC ?? "https://rpc-testnet.onelabs.cc:443";
+    process.env.NEXT_PUBLIC_CHAIN_RPC ??
+    process.env.NEXT_PUBLIC_ONECHAIN_RPC ??
+    "https://rpc-testnet.onelabs.cc:443";
 
 /**
  * Singleton SuiClient used by the indexer.

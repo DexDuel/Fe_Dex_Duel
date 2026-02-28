@@ -6,7 +6,7 @@
 };
 
 const DEFAULTS: DexDuelConfig = {
-  packageId: process.env.DEXDUEL_PACKAGE_ID ?? "",
+  packageId: process.env.DEXDUEL_PACKAGE_ID ?? process.env.NEXT_PUBLIC_PACKAGE_ID ?? "",
   moduleName: process.env.DEXDUEL_MODULE_NAME ?? "dexduel",
   createFn: process.env.DEXDUEL_CREATE_FN ?? "create_tournament",
   cancelFn: process.env.DEXDUEL_CANCEL_FN ?? "cancel_tournament",
