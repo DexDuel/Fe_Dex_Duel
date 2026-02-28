@@ -1,12 +1,12 @@
-import { onechainConfig } from "@/src/config/onechain";
-
-export const PACKAGE_ID = onechainConfig.packageId;
+export const PACKAGE_ID =
+  "0xc260f21c3763480017b9208de051b2ca8f42d2be5dae8c64669e30db7e13eb1d";
 
 export const OBJECT_IDS = {
-  FAUCET: onechainConfig.faucetId,
-  ADMIN_CAP: onechainConfig.adminCapId,
-  TREASURY: onechainConfig.treasuryId,
-  CLOCK: onechainConfig.clockId,
+  FAUCET: "0x16b16664d2a8963f3705839152ed85d58ce617dc13c3b7d89d8bea45ce816eae",
+  ADMIN_CAP:
+    "0x348eb18f5d14e51b74c9bbce8546e7248a89158f9c89e06e65b1752a9c34416a",
+  TREASURY: "0x710eec94e6a9e9aefa20b1481c17a081e89e0029d7094db7839bfa4b4cd5a80b",
+  CLOCK: "0x6",
 };
 
 export const MODULES = {
@@ -17,7 +17,7 @@ export const MODULES = {
   GAME_CONTROLLER: `${PACKAGE_ID}::game_controller`,
 } as const;
 
-export const USDT_TYPE = onechainConfig.usdtType;
+export const USDT_TYPE = `${PACKAGE_ID}::usdt::USDT`;
 /** @deprecated use USDT_TYPE */
 export const OUSDT_TYPE = USDT_TYPE;
 

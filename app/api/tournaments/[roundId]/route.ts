@@ -1,8 +1,7 @@
 /**
  * GET /api/tournaments/[roundId]
  *
- * Returns full Round details by its on-chain Object Address (0x...).
- * The [roundId] segment is the round's blockchain Object ID (String).
+ * Returns full Round details by its on-chain roundId (u64 — passed as a decimal string in the URL).
  */
 
 import { prisma } from "@/lib/db";
@@ -13,9 +12,9 @@ export async function GET(
     { params }: { params: Promise<{ roundId: string }> },
 ) {
     try {
-        const { roundId } = await params;
+        const { roundId: rawId } = await params;
+        const roundId = BigInt(rawId);
 
-        // roundId is now a String Object Address (e.g. "0x89ab...")
         const round = await prisma.round.findUnique({ where: { roundId } });
         if (!round) {
             return Response.json({ ok: false, error: "Tournament not found" }, { status: 404 });

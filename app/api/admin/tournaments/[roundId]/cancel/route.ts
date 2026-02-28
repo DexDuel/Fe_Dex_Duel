@@ -24,12 +24,6 @@ export async function POST(
       return NextResponse.json({ error: "Tournament not found" }, { status: 404 });
     }
 
-    // NEW: Ownership validation
-    // If the round has an ownerAddress, only that address can cancel it.
-    if (round.ownerAddress && round.ownerAddress.toLowerCase() !== auth.address.toLowerCase()) {
-      return NextResponse.json({ error: "You are not the owner of this tournament" }, { status: 403 });
-    }
-
     if (round.status !== "UPCOMING") {
       return NextResponse.json({ error: "Only UPCOMING tournaments can be canceled" }, { status: 400 });
     }
