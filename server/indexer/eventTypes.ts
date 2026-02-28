@@ -1,4 +1,4 @@
-import { DEXDUEL_MODULE, PACKAGE_ID } from "./chainClient.ts";
+import { DEXDUEL_MODULE, PACKAGE_ID } from "./chainClient";
 
 /**
  * Full qualified Move event types emitted by the DexDuel smart contract.
@@ -21,7 +21,7 @@ export const EVENT_TYPES = {
     TournamentStarted: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentStarted`,
     TournamentEnded: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentEnded`,
     TournamentSettled: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentSettled`,
-    TournamentCancelled: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentCancelled`,
+    TournamentCanceled: `${PACKAGE_ID}::${DEXDUEL_MODULE}::TournamentCanceled`,
 } as const;
 
 export type EventTypeName = keyof typeof EVENT_TYPES;

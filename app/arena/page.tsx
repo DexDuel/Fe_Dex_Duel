@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { FormEvent, useMemo, useState, useSyncExternalStore } from "react";
 import { ConnectButton, useCurrentAccount } from "@onelabs/dapp-kit";
 import { useCreateTournament } from "@/hooks/useCreateTournament";
 import { toFinnhubSymbol, useMarketSymbols } from "@/hooks/useMarketData";
@@ -10,6 +10,7 @@ import { useStartRound } from "@/hooks/useStartRound";
 import { EXPLORER_BASE, isCreateTournamentAdmin } from "@/lib/constants";
 
 type FormState = {
+  roundId: string;
   seasonId: string;
   coinSymbol: string;
   entryFeeRaw: string;
@@ -30,6 +31,7 @@ function initialFormState(): FormState {
   const start = new Date(now.getTime() + 10 * 60 * 1000);
   const end = new Date(start.getTime() + 60 * 60 * 1000);
   return {
+    roundId: "1",
     seasonId: "1",
     coinSymbol: "BTC",
     entryFeeRaw: "100000000",
@@ -131,25 +133,23 @@ export default function CreateTournamentPage() {
     () => false
   );
   const [txDigest, setTxDigest] = useState<string | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  // Per-tournament start/cancel state keyed by roundObjectId
-  type TxState = { message: string | null; txDigest: string | null; isError: boolean };
-  const [startStateByRound, setStartStateByRound] = useState<Record<string, TxState>>({});
-  const [cancelStateByRound, setCancelStateByRound] = useState<Record<string, TxState>>({});
+  const [startTxDigest, setStartTxDigest] = useState<string | null>(null);
+  const [startMessage, setStartMessage] = useState<string | null>(null);
+  const [cancelTxDigest, setCancelTxDigest] = useState<string | null>(null);
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const { createTournament, isPending, isSuccess, isError, error } = useCreateTournament();
   const {
     startRound,
     isPending: isStartPending,
+    isError: isStartError,
+    error: startError,
     reset: resetStartRound,
   } = useStartRound();
   const {
     cancelTournament,
     isPending: isCancelPending,
+    isError: isCancelError,
+    error: cancelError,
     reset: resetCancelTournament,
   } = useCancelTournament();
 
@@ -166,20 +166,18 @@ export default function CreateTournamentPage() {
   const myTournaments = useMemo(() => {
     if (!account?.address) return [];
     const normalized = account.address.toLowerCase();
-    return tournaments.filter(
-      (t) =>
-        t.creatorAddress.toLowerCase() === normalized &&
-        t.status !== "cancelled"
-    );
+    return tournaments.filter((t) => t.creatorAddress.toLowerCase() === normalized);
   }, [tournaments, account]);
 
   const validation = useMemo(() => {
+    const roundId = Number(form.roundId);
     const seasonId = Number(form.seasonId);
     const entryFeeRaw = Number(form.entryFeeRaw);
     const minParticipants = Number(form.minParticipants);
     const earlyWindowMinutes = Number(form.earlyWindowMinutes);
     const startTimeMs = parseDateInput(form.startTime);
     const endTimeMs = parseDateInput(form.endTime);
+    if (!Number.isFinite(roundId) || roundId <= 0) return "Round ID must be greater than 0";
     if (!Number.isFinite(seasonId) || seasonId <= 0) return "Season ID must be greater than 0";
     if (!form.coinSymbol.trim()) return "Coin symbol is required";
     if (!Number.isFinite(entryFeeRaw) || entryFeeRaw <= 0) return "Entry fee must be greater than 0";
@@ -194,7 +192,7 @@ export default function CreateTournamentPage() {
     event.preventDefault();
     if (!account || !isAdmin || validation) return;
     const result = await createTournament({
-      roundId: Date.now(),
+      roundId: Number(form.roundId),
       seasonId: Number(form.seasonId),
       coinSymbol: selectedCoinSymbol,
       startTimeMs: parseDateInput(form.startTime),
@@ -228,65 +226,35 @@ export default function CreateTournamentPage() {
   async function handleStartTournament(roundObjectId: string, coinSymbol: string) {
     if (!account || !isAdmin) return;
     resetStartRound();
-    setStartStateByRound((prev) => ({
-      ...prev,
-      [roundObjectId]: { message: "Fetching live price…", txDigest: null, isError: false },
-    }));
+    setStartMessage(null);
+    setStartTxDigest(null);
     try {
       const priceStartRaw = await getLiveStartPriceRaw(coinSymbol);
-      setStartStateByRound((prev) => ({
-        ...prev,
-        [roundObjectId]: { message: "Submitting transaction…", txDigest: null, isError: false },
-      }));
       const result = await startRound({ roundId: roundObjectId, priceStartRaw });
-      setStartStateByRound((prev) => ({
-        ...prev,
-        [roundObjectId]: {
-          message: `Round started at price ${(priceStartRaw / 1e8).toFixed(2)}`,
-          txDigest: result.digest ?? null,
-          isError: false,
-        },
-      }));
+      setStartTxDigest(result.digest ?? null);
+      setStartMessage(`Round started for ${coinSymbol}/USDT with start price raw ${priceStartRaw}.`);
       await tournamentsQuery.refetch();
     } catch (executionError) {
-      setStartStateByRound((prev) => ({
-        ...prev,
-        [roundObjectId]: {
-          message: executionError instanceof Error ? executionError.message : "Failed to start round.",
-          txDigest: null,
-          isError: true,
-        },
-      }));
+      setStartMessage(
+        executionError instanceof Error ? executionError.message : "Failed to start tournament round.",
+      );
     }
   }
 
   async function handleCancelTournament(sessionId: string, roundObjectId: string) {
     if (!account || !isAdmin) return;
     resetCancelTournament();
-    setCancelStateByRound((prev) => ({
-      ...prev,
-      [roundObjectId]: { message: "Submitting…", txDigest: null, isError: false },
-    }));
+    setCancelMessage(null);
+    setCancelTxDigest(null);
     try {
       const result = await cancelTournament({ sessionId, roundId: roundObjectId });
-      setCancelStateByRound((prev) => ({
-        ...prev,
-        [roundObjectId]: {
-          message: "Cancelled.",
-          txDigest: result.digest ?? null,
-          isError: false,
-        },
-      }));
+      setCancelTxDigest(result.digest ?? null);
+      setCancelMessage("Tournament cancellation transaction submitted.");
       await tournamentsQuery.refetch();
     } catch (executionError) {
-      setCancelStateByRound((prev) => ({
-        ...prev,
-        [roundObjectId]: {
-          message: executionError instanceof Error ? executionError.message : "Failed to cancel.",
-          txDigest: null,
-          isError: true,
-        },
-      }));
+      setCancelMessage(
+        executionError instanceof Error ? executionError.message : "Failed to cancel tournament.",
+      );
     }
   }
 
@@ -429,6 +397,16 @@ export default function CreateTournamentPage() {
 
               <form onSubmit={onSubmit} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <FormField label="Round ID">
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.roundId}
+                      onChange={(e) => setForm((prev) => ({ ...prev, roundId: e.target.value }))}
+                      className="form-field-glow"
+                      style={inputStyle}
+                    />
+                  </FormField>
 
                   <FormField label="Season ID">
                     <input
@@ -594,7 +572,41 @@ export default function CreateTournamentPage() {
                 </div>
               </div>
 
-              {/* Per-tournament messages are shown inline in the table rows */}
+              {startMessage && (
+                <div className="mb-4">
+                  <AlertBox type={isStartError ? "error" : "success"}>
+                    {startMessage}
+                    {startTxDigest && (
+                      <a
+                        href={`${EXPLORER_BASE}/txblock/${startTxDigest}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline ml-2"
+                      >
+                        View tx →
+                      </a>
+                    )}
+                  </AlertBox>
+                </div>
+              )}
+
+              {cancelMessage && (
+                <div className="mb-4">
+                  <AlertBox type={isCancelError ? "error" : "success"}>
+                    {cancelMessage}
+                    {cancelTxDigest && (
+                      <a
+                        href={`${EXPLORER_BASE}/txblock/${cancelTxDigest}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline ml-2"
+                      >
+                        View tx →
+                      </a>
+                    )}
+                  </AlertBox>
+                </div>
+              )}
 
               {tournamentsQuery.isLoading && (
                 <div className="space-y-3">
@@ -626,199 +638,99 @@ export default function CreateTournamentPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {myTournaments.map((tournament, i) => {
-                        const canStartNow = nowMs >= tournament.startTimeMs;
-                        const needsStart =
-                          !tournament.isActive &&
-                          tournament.status !== "ended" &&
-                          tournament.status !== "cancelled" &&
-                          canStartNow;
-                        const tooEarlyToStart =
-                          !tournament.isActive &&
-                          tournament.status !== "ended" &&
-                          tournament.status !== "cancelled" &&
-                          !canStartNow;
-                        const msUntilStart = Math.max(0, tournament.startTimeMs - nowMs);
-                        const minsLeft = Math.ceil(msUntilStart / 60_000);
-                        const startState = startStateByRound[tournament.roundObjectId];
-                        const cancelState = cancelStateByRound[tournament.roundObjectId];
-                        const isThisStartPending =
-                          isStartPending && startState?.message === "Submitting transaction…";
+                      {myTournaments.map((tournament, i) => (
+                        <tr
+                          key={tournament.sessionId}
+                          className="animate-row-enter transition-colors hover:bg-white/[0.02]"
+                          style={{
+                            borderBottom: "1px solid rgba(255,255,255,0.04)",
+                            animationDelay: `${i * 40}ms`,
+                          }}
+                        >
+                          <td className="px-4 py-3.5 text-xs font-mono text-slate-500">
+                            {tournament.sessionId.slice(0, 12)}…
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className="font-black text-sm text-slate-200">
+                              {tournament.coinSymbol}
+                              <span className="text-slate-500 font-bold text-xs">/USDT</span>
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <StatusBadge status={tournament.status} />
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-slate-500">
+                            {mounted ? formatDateTime(tournament.startTimeMs) : "..."}
+                          </td>
+                          <td className="px-4 py-3.5 text-xs text-slate-500">
+                            {mounted ? formatDateTime(tournament.endTimeMs) : "..."}
+                          </td>
+                          <td className="px-4 py-3.5 text-sm font-bold text-slate-300">
+                            {tournament.totalParticipants}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={
+                                  isStartPending ||
+                                  tournament.status === "ended" ||
+                                  tournament.status === "cancelled" ||
+                                  tournament.isActive
+                                }
+                                onClick={() => handleStartTournament(tournament.roundObjectId, tournament.coinSymbol)}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:opacity-80"
+                                style={{
+                                  backgroundColor: "rgba(13,242,128,0.15)",
+                                  color: "#0df280",
+                                  border: "1px solid rgba(13,242,128,0.3)",
+                                }}
+                                title={tournament.isActive ? "Round already active." : "Run start_game admin transaction."}
+                              >
+                                {isStartPending ? "…" : tournament.isActive ? "Live" : "Start"}
+                              </button>
 
-                        return (
-                          <tr
-                            key={tournament.sessionId}
-                            className="animate-row-enter transition-colors hover:bg-white/[0.02]"
-                            style={{
-                              borderBottom: "1px solid rgba(255,255,255,0.04)",
-                              animationDelay: `${i * 40}ms`,
-                              backgroundColor: needsStart ? "rgba(245,158,11,0.03)" : undefined,
-                            }}
-                          >
-                            <td className="px-4 py-3.5 text-xs font-mono text-slate-500">
-                              {tournament.sessionId.slice(0, 12)}…
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <span className="font-black text-sm text-slate-200">
-                                {tournament.coinSymbol}
-                                <span className="text-slate-500 font-bold text-xs">/USDT</span>
-                              </span>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <div className="flex flex-col gap-1">
-                                <StatusBadge status={tournament.status} />
-                                {needsStart && (
-                                  <span
-                                    className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                                    style={{
-                                      color: "#f59e0b",
-                                      backgroundColor: "rgba(245,158,11,0.15)",
-                                      border: "1px solid rgba(245,158,11,0.4)",
-                                    }}
-                                  >
-                                    ⚡ Start Now
-                                  </span>
-                                )}
-                                {tooEarlyToStart && (
-                                  <span
-                                    className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full"
-                                    style={{
-                                      color: "#64748b",
-                                      backgroundColor: "rgba(255,255,255,0.04)",
-                                      border: "1px solid rgba(255,255,255,0.08)",
-                                    }}
-                                  >
-                                    ⏱ In {minsLeft}m
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3.5 text-xs text-slate-500">
-                              {mounted ? formatDateTime(tournament.startTimeMs) : "..."}
-                            </td>
-                            <td className="px-4 py-3.5 text-xs text-slate-500">
-                              {mounted ? formatDateTime(tournament.endTimeMs) : "..."}
-                            </td>
-                            <td className="px-4 py-3.5 text-sm font-bold text-slate-300">
-                              {tournament.totalParticipants}
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center gap-2">
+                              {(() => {
+                                const canCancel =
+                                  tournament.status !== "ended" &&
+                                  tournament.status !== "cancelled" &&
+                                  (!tournament.isActive || tournament.totalParticipants < tournament.minParticipants);
+                                return (
                                   <button
                                     type="button"
-                                    disabled={
-                                      isStartPending ||
-                                      tournament.status === "ended" ||
-                                      tournament.status === "cancelled" ||
-                                      tournament.isActive ||
-                                      tooEarlyToStart
-                                    }
-                                    onClick={() => handleStartTournament(tournament.roundObjectId, tournament.coinSymbol)}
+                                    disabled={isCancelPending || !canCancel}
+                                    onClick={() => handleCancelTournament(tournament.sessionId, tournament.roundObjectId)}
                                     className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:opacity-80"
-                                    style={
-                                      tournament.isActive
-                                        ? { backgroundColor: "rgba(13,242,128,0.1)", color: "#0df280", border: "1px solid rgba(13,242,128,0.3)" }
-                                        : needsStart
-                                        ? { backgroundColor: "rgba(245,158,11,0.2)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.5)", boxShadow: "0 0 8px rgba(245,158,11,0.2)" }
-                                        : tooEarlyToStart
-                                        ? { backgroundColor: "rgba(255,255,255,0.04)", color: "#64748b", border: "1px solid rgba(255,255,255,0.08)" }
-                                        : { backgroundColor: "rgba(13,242,128,0.15)", color: "#0df280", border: "1px solid rgba(13,242,128,0.3)" }
-                                    }
+                                    style={{
+                                      backgroundColor: "rgba(239,68,68,0.15)",
+                                      color: "#fca5a5",
+                                      border: "1px solid rgba(239,68,68,0.3)",
+                                    }}
                                     title={
                                       tournament.isActive
-                                        ? "Round already active."
-                                        : tooEarlyToStart
-                                        ? `Can start in ${minsLeft}m (after ${mounted ? new Date(tournament.startTimeMs).toLocaleTimeString() : "..."})`
-                                        : "Click to fetch live price and start the round."
+                                        ? `Only below min (${tournament.minParticipants}) can cancel.`
+                                        : "Run cancel_tournament admin transaction."
                                     }
                                   >
-                                    {isThisStartPending
-                                      ? "…"
-                                      : tournament.isActive
-                                      ? "Live ✓"
-                                      : needsStart
-                                      ? "Start Now!"
-                                      : tooEarlyToStart
-                                      ? `In ${minsLeft}m`
-                                      : "Start"}
+                                    {isCancelPending ? "…" : "Cancel"}
                                   </button>
-
-                                  {(() => {
-                                    const canCancel =
-                                      tournament.status !== "ended" &&
-                                      tournament.status !== "cancelled" &&
-                                      (!tournament.isActive || tournament.totalParticipants < tournament.minParticipants);
-                                    return (
-                                      <button
-                                        type="button"
-                                        disabled={isCancelPending || !canCancel}
-                                        onClick={() => handleCancelTournament(tournament.sessionId, tournament.roundObjectId)}
-                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed transition-all hover:opacity-80"
-                                        style={{
-                                          backgroundColor: "rgba(239,68,68,0.15)",
-                                          color: "#fca5a5",
-                                          border: "1px solid rgba(239,68,68,0.3)",
-                                        }}
-                                        title={
-                                          tournament.isActive
-                                            ? `Only below min (${tournament.minParticipants}) can cancel.`
-                                            : "Run cancel_tournament admin transaction."
-                                        }
-                                      >
-                                        {isCancelPending && cancelState?.message === "Submitting…" ? "…" : "Cancel"}
-                                      </button>
-                                    );
-                                  })()}
-                                </div>
-
-                                {/* Per-tournament feedback */}
-                                {startState?.message && (
-                                  <p
-                                    className="text-[10px] font-bold max-w-[200px]"
-                                    style={{ color: startState.isError ? "#fca5a5" : "#0df280" }}
-                                  >
-                                    {startState.isError && "✗ "}{startState.message}
-                                    {startState.txDigest && (
-                                      <a
-                                        href={`${EXPLORER_BASE}/txblock/${startState.txDigest}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="ml-1 underline text-sky-400"
-                                      >
-                                        tx →
-                                      </a>
-                                    )}
-                                  </p>
-                                )}
-                                {cancelState?.message && (
-                                  <p
-                                    className="text-[10px] font-bold max-w-[200px]"
-                                    style={{ color: cancelState.isError ? "#fca5a5" : "#0df280" }}
-                                  >
-                                    {cancelState.message}
-                                    {cancelState.txDigest && (
-                                      <a
-                                        href={`${EXPLORER_BASE}/txblock/${cancelState.txDigest}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="ml-1 underline text-sky-400"
-                                      >
-                                        tx →
-                                      </a>
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                                );
+                              })()}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               )}
 
+              {isStartError && startError && (
+                <p className="text-xs text-red-400 font-bold mt-3">{startError.message}</p>
+              )}
+              {isCancelError && cancelError && (
+                <p className="text-xs text-red-400 font-bold mt-3">{cancelError.message}</p>
+              )}
             </div>
           </div>
         )}

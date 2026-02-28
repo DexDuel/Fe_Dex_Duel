@@ -218,21 +218,6 @@ function TournamentCard({
         ))}
       </div>
 
-      {/* "Waiting for admin" banner when start time passed but not live */}
-      {tournament.status === "upcoming" && Date.now() >= tournament.startTimeMs && (
-        <div
-          className="mx-5 mb-3 rounded-lg px-3 py-2 text-[10px] font-bold flex items-center gap-2"
-          style={{
-            backgroundColor: "rgba(245,158,11,0.08)",
-            color: "#fcd34d",
-            border: "1px solid rgba(245,158,11,0.2)",
-          }}
-        >
-          <span className="material-symbols-outlined text-sm leading-none">schedule</span>
-          Waiting for admin to start the round on-chain…
-        </div>
-      )}
-
       {/* Vote distribution bar */}
       <div className="px-5 pb-4">
         <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest mb-1.5">
@@ -303,85 +288,70 @@ function TournamentCard({
       </div>
 
       {/* Action buttons */}
-      {tournament.status === "upcoming" ? (
-        <div className="px-5 pb-5 flex flex-col gap-2">
-          <Link
-            href={`/tournaments/${tournament.sessionId}`}
-            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-80"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.06)",
-              color: "#cbd5e1",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
-            View Details
-          </Link>
-          <div
-            className="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5"
-            style={{
-              backgroundColor: "rgba(245,158,11,0.07)",
-              color: "#f59e0b",
-              border: "1px dashed rgba(245,158,11,0.3)",
-            }}
-          >
-            <span className="material-symbols-outlined text-sm leading-none">schedule</span>
-            Waiting for admin to start · {formatTimeLeft(tournament.startTimeMs)} remaining
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2 px-5 pb-5">
-          <Link
-            href={`/tournaments/${tournament.sessionId}`}
-            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-80"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.06)",
-              color: "#cbd5e1",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
-            View Details
-          </Link>
+      <div className="grid grid-cols-2 gap-2 px-5 pb-5">
+        <Link
+          href={`/tournaments/${tournament.sessionId}`}
+          className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-80"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.06)",
+            color: "#cbd5e1",
+            border: "1px solid rgba(255,255,255,0.12)",
+          }}
+        >
+          View Details
+        </Link>
 
-          {isLive ? (
-            <button
-              type="button"
-              onClick={onJoin}
-              disabled={isJoining}
-              className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all"
-              style={{
-                backgroundColor: isJoining ? "rgba(13,242,128,0.4)" : "#0df280",
-                color: "#0a0a0a",
-                opacity: isJoining ? 0.7 : 1,
-                boxShadow: isJoining ? "none" : "0 0 20px rgba(13,242,128,0.3)",
-              }}
-            >
-              {isJoining ? "Joining..." : `Join ${formatUSDT(tournament.entryFeeRaw)} USDT`}
-            </button>
-          ) : tournament.status === "cancelled" ? (
-            <div
-              className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-50 cursor-not-allowed"
-              style={{
-                backgroundColor: "rgba(239,68,68,0.1)",
-                color: "#fca5a5",
-                border: "1px solid rgba(239,68,68,0.25)",
-              }}
-            >
-              Cancelled
-            </div>
-          ) : (
-            <div
-              className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-40 cursor-not-allowed"
-              style={{
-                backgroundColor: "rgba(148,163,184,0.08)",
-                color: "#94a3b8",
-                border: "1px solid rgba(148,163,184,0.2)",
-              }}
-            >
-              Ended
-            </div>
-          )}
-        </div>
-      )}
+        {isLive ? (
+          <button
+            type="button"
+            onClick={onJoin}
+            disabled={isJoining}
+            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all"
+            style={{
+              backgroundColor: isJoining ? "rgba(13,242,128,0.4)" : "#0df280",
+              color: "#0a0a0a",
+              opacity: isJoining ? 0.7 : 1,
+              boxShadow: isJoining ? "none" : "0 0 20px rgba(13,242,128,0.3)",
+            }}
+          >
+            {isJoining ? "Joining..." : `Join ${formatUSDT(tournament.entryFeeRaw)} USDT`}
+          </button>
+        ) : tournament.status === "upcoming" ? (
+          <Link
+            href={`/tournaments/${tournament.sessionId}#join-tournament`}
+            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-90"
+            style={{
+              backgroundColor: "#0df280",
+              color: "#0a0a0a",
+              boxShadow: "0 0 16px rgba(13,242,128,0.25)",
+            }}
+          >
+            Join Tournament
+          </Link>
+        ) : tournament.status === "cancelled" ? (
+          <div
+            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-50 cursor-not-allowed"
+            style={{
+              backgroundColor: "rgba(239,68,68,0.1)",
+              color: "#fca5a5",
+              border: "1px solid rgba(239,68,68,0.25)",
+            }}
+          >
+            Cancelled
+          </div>
+        ) : (
+          <div
+            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-40 cursor-not-allowed"
+            style={{
+              backgroundColor: "rgba(148,163,184,0.08)",
+              color: "#94a3b8",
+              border: "1px solid rgba(148,163,184,0.2)",
+            }}
+          >
+            Ended
+          </div>
+        )}
+      </div>
 
       {joinError && (
         <p className="px-5 pb-4 text-[11px] font-bold text-red-400">{joinError}</p>
@@ -451,8 +421,7 @@ export default function TournamentsPage() {
   const tournaments = useMemo(() => tournamentsQuery.data ?? [], [tournamentsQuery.data]);
   const filteredTournaments = useMemo(() => {
     return tournaments.filter((t) => {
-      const statusMatch =
-        statusFilter === "all" ? t.status !== "cancelled" : t.status === statusFilter;
+      const statusMatch = statusFilter === "all" || t.status === statusFilter;
       const searchMatch =
         t.coinSymbol.toLowerCase().includes(search.toLowerCase()) ||
         String(t.roundNumber).includes(search);
