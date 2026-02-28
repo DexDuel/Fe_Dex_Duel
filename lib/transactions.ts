@@ -104,6 +104,9 @@ export function buildCreateTournamentTx(
   const tx = new Transaction();
   tx.setGasBudget(35_000_000);
 
+  // max_prediction_window = full tournament duration so users can join any time during the round
+  const durationMinutes = Math.max(1, Math.floor((params.endTimeMs - params.startTimeMs) / 60_000));
+
   tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::create_game_session`,
     arguments: [
@@ -114,8 +117,8 @@ export function buildCreateTournamentTx(
       tx.pure.u64(params.endTimeMs),
       tx.pure.u64(params.entryFeeRaw),
       tx.pure.u64(params.minParticipants),
-      tx.pure.u64(params.earlyWindowMinutes), // Tambahkan ini
-      tx.pure.u64(params.earlyWindowMinutes), // Gunakan nilai yang sama untuk max window sebagai default
+      tx.pure.u64(params.earlyWindowMinutes), // early bonus window
+      tx.pure.u64(durationMinutes),           // max prediction window = full duration
     ],
   });
 
@@ -140,10 +143,11 @@ export function buildStartRoundTx(params: StartRoundParams): Transaction {
   const tx = new Transaction();
   tx.setGasBudget(10_000_000);
 
+  // start_game(round: &mut Round, price_start: u64, clock: &Clock, ctx: &TxContext)
+  // Note: no AdminCap required — public fun callable by anyone
   tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::start_game`,
     arguments: [
-      tx.object(OBJECT_IDS.ADMIN_CAP),
       tx.object(params.roundId),
       tx.pure.u64(params.priceStartRaw),
       tx.object(OBJECT_IDS.CLOCK),

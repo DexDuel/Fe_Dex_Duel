@@ -4,7 +4,7 @@ export const PACKAGE_ID = onechainConfig.packageId;
 
 export const OBJECT_IDS = {
   FAUCET: onechainConfig.faucetId,
-  ADMIN_CAP: "0x348eb18f5d14e51b74c9bbce8546e7248a89158f9c89e06e65b1752a9c34416a", // Tetap jika masih dipakai, tapi prioritaskan config
+  ADMIN_CAP: onechainConfig.adminCapId,
   TREASURY: onechainConfig.treasuryId,
   CLOCK: onechainConfig.clockId,
 };

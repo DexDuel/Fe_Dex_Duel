@@ -49,6 +49,12 @@ export const onechainConfig = {
     "0xf1bbfbbaae6f9f6e8c88755072f391656538a685caf3f189d5263ab4a24fc1d9"
   ),
 
+  /** AdminCap object ID (owned by deployer wallet). Required to call start_game. */
+  adminCapId: optionalEnv(
+    "NEXT_PUBLIC_ADMIN_CAP_ID",
+    "0x348eb18f5d14e51b74c9bbce8546e7248a89158f9c89e06e65b1752a9c34416a"
+  ),
+
   /** Sui/OneChain Clock system object ID. */
   clockId: "0x6" as const,
 } as const;
