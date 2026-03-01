@@ -100,6 +100,48 @@ function extractBaseSymbol(symbol: FinnhubSymbol): string {
   return pair;
 }
 
+/** Fetch the close price closest to a given timestamp, trying progressively coarser resolutions. */
+export function useMarketPriceAt(symbol?: string, timestampMs?: number) {
+  return useQuery({
+    queryKey: ["market-price-at", symbol ?? "", timestampMs ?? 0],
+    queryFn: async () => {
+      if (!symbol || !timestampMs) return null;
+      // Try finer → coarser resolutions so old rounds still resolve
+      const attempts: { resolution: string; windowMin: number }[] = [
+        { resolution: "1",  windowMin: 15   },
+        { resolution: "5",  windowMin: 60   },
+        { resolution: "15", windowMin: 180  },
+        { resolution: "60", windowMin: 720  },
+        { resolution: "D",  windowMin: 2880 },
+      ];
+      const targetSec = Math.floor(timestampMs / 1000);
+      for (const { resolution, windowMin } of attempts) {
+        const to = targetSec + 120;
+        const from = to - windowMin * 60;
+        const params = new URLSearchParams({ symbol, resolution, from: String(from), to: String(to) });
+        try {
+          const res = await fetch(`/api/market/candles?${params}`, { cache: "no-store" });
+          if (!res.ok) continue;
+          const data = await res.json() as FinnhubCandles;
+          if (!data.c?.length || data.s !== "ok") continue;
+          let closest = 0, minDiff = Infinity;
+          for (let i = 0; i < data.t.length; i++) {
+            const diff = Math.abs(data.t[i] - targetSec);
+            if (diff < minDiff) { minDiff = diff; closest = i; }
+          }
+          return data.c[closest] ?? null;
+        } catch { continue; }
+      }
+      return null;
+    },
+    enabled: Boolean(symbol && timestampMs && timestampMs > 0),
+    // Keep retrying every 20s until we get a price (Finnhub has ~1-2 min indexing delay)
+    staleTime: (q) => (q.state.data === null ? 20_000 : 10 * 60 * 1000),
+    refetchInterval: (q) => (q.state.data === null ? 20_000 : false),
+    retry: 3,
+  });
+}
+
 export function useMarketSymbols(exchange = "BINANCE", quote = "USDT") {
   return useQuery({
     queryKey: ["market-symbols", exchange, quote],

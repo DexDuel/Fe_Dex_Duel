@@ -26,8 +26,12 @@ export interface OnChainTournament {
   totalPoolRaw: number;
   yieldPoolRaw: number;
   winnerDirection: number;
+  priceStart: number;
+  priceEnd: number;
   isActive: boolean;
   isCancelled: boolean;
+  isSettled: boolean;
+  finalPrizePool: number;
   minParticipants: number;
   status: TournamentStatus;
   creatorAddress: string;
@@ -36,6 +40,7 @@ export interface OnChainTournament {
 export interface JoinGameEvent {
   txDigest: string;
   timestampMs: number;
+  sessionId: string;
   roundNumber: number;
   player: string;
   direction: 1 | 2;
@@ -68,11 +73,14 @@ type ParsedRound = {
   totalPoolRaw: number;
   yieldPoolRaw: number;
   winnerDirection: number;
+  priceStart: number;
+  priceEnd: number;
   isActive: boolean;
   isEnded: boolean;
   isSettled: boolean;
   isCancelled: boolean;
   minParticipants: number;
+  finalPrizePool: number;
 };
 
 const OBJECT_TYPES = {
@@ -184,7 +192,10 @@ function parseRound(roundData: SuiObjectData): ParsedRound | null {
     totalPoolRaw: readBalanceValue(fields["total_pool"]),
     yieldPoolRaw: readBalanceValue(fields["yield_pool"]),
     winnerDirection: toNumber(fields["winner_direction"]),
+    priceStart: toNumber(fields["price_start"]),
+    priceEnd: toNumber(fields["price_end"]),
     minParticipants: toNumber(fields["min_participants"]),
+    finalPrizePool: toNumber(fields["final_prize_pool"]),
     isActive: readBool(statusFields, "is_active") || readBool(statusFields, "isActive"),
     isEnded: readBool(statusFields, "is_ended") || readBool(statusFields, "isEnded"),
     isSettled: readBool(statusFields, "is_settled") || readBool(statusFields, "isSettled"),
@@ -300,8 +311,12 @@ async function fetchOnChainTournaments(client: SuiClient): Promise<OnChainTourna
       totalPoolRaw: round.totalPoolRaw,
       yieldPoolRaw: round.yieldPoolRaw,
       winnerDirection: round.winnerDirection,
+      priceStart: round.priceStart,
+      priceEnd: round.priceEnd,
       isActive: round.isActive,
       isCancelled: round.isCancelled,
+      isSettled: round.isSettled,
+      finalPrizePool: round.finalPrizePool,
       minParticipants: round.minParticipants,
       status: statusFromTimes(
         now,
@@ -335,6 +350,7 @@ function parseJoinEvent(event: SuiEvent): JoinGameEvent | null {
   return {
     txDigest: event.id.txDigest,
     timestampMs: toNumber(event.timestampMs),
+    sessionId: typeof parsed.session_id === "string" ? parsed.session_id : "",
     roundNumber: toNumber(parsed.round_id),
     player,
     direction,

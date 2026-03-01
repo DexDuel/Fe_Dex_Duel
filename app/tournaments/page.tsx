@@ -1,21 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useCurrentAccount } from "@onelabs/dapp-kit";
-import { useJoinGame } from "@/hooks/useJoinGame";
-import {
-  type OnChainTournament,
-  useOnChainTournaments,
-} from "@/hooks/useOnChainTournaments";
-import { useUSDTBalance } from "@/hooks/useUSDTBalance";
-import {
-  DIRECTION,
-  EXPLORER_BASE,
-  formatUSDT,
-} from "@/lib/constants";
-
-type PickDirection = 1 | 2;
+import { useMultiRoundTournaments, type TournamentGroup } from "@/hooks/useMultiRoundTournaments";
+import { formatUSDT } from "@/lib/constants";
 
 const STATUS_STYLE = {
   live: {
@@ -30,24 +18,13 @@ const STATUS_STYLE = {
     bg: "rgba(245,158,11,0.12)",
     border: "rgba(245,158,11,0.3)",
   },
-  ended: {
+  completed: {
     label: "ENDED",
     color: "#94a3b8",
     bg: "rgba(148,163,184,0.1)",
     border: "rgba(148,163,184,0.2)",
   },
-  cancelled: {
-    label: "CANCELLED",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.1)",
-    border: "rgba(239,68,68,0.3)",
-  },
 } as const;
-
-function formatDateTime(timestampMs: number): string {
-  if (!timestampMs) return "-";
-  return new Date(timestampMs).toLocaleString();
-}
 
 function formatTimeLeft(targetMs: number): string {
   const diff = targetMs - Date.now();
@@ -60,74 +37,81 @@ function formatTimeLeft(targetMs: number): string {
   return `${mins}m`;
 }
 
-/* ─── Animated stat card ─────────────────────────────────────────── */
-function StatCard({
-  label,
-  value,
-  color,
-  delay = 0,
+/* ─── Round progress dots ────────────────────────────────────────── */
+function RoundDots({
+  rounds,
+  tournament,
 }: {
-  label: string;
-  value: string | number;
-  color: string;
-  delay?: number;
+  rounds: TournamentGroup["rounds"];
+  tournament: TournamentGroup;
 }) {
   return (
-    <div
-      className="glass-panel rounded-2xl p-4 relative overflow-hidden animate-card-enter"
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      {/* ambient glow */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(ellipse 80% 80% at 50% 100%, ${color}14 0%, transparent 70%)`,
-        }}
-      />
-      <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 relative z-10">
-        {label}
-      </p>
-      <p className="text-xl font-black relative z-10" style={{ color }}>
-        {value}
-      </p>
+    <div className="flex items-center gap-1 flex-wrap">
+      {rounds.map((r, i) => {
+        const isDone = r.status === "ended" || r.isSettled;
+        const isLive = r.status === "live";
+        const dotColor = isDone ? "#0df280" : isLive ? "#f59e0b" : "#334155";
+        return (
+          <div key={r.sessionId} className="flex items-center gap-1">
+            <div
+              className={`w-2.5 h-2.5 rounded-full shrink-0 ${isLive ? "animate-live-dot" : ""}`}
+              style={{ backgroundColor: dotColor }}
+              title={`Round ${r.roundNumber}`}
+            />
+            {i < rounds.length - 1 && (
+              <div
+                className="w-3 h-px"
+                style={{
+                  backgroundColor: isDone ? "rgba(13,242,128,0.4)" : "rgba(255,255,255,0.1)",
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/* ─── Tournament Card ───────────────────────────────────────────── */
-function TournamentCard({
+/* ─── Tournament Group Card ──────────────────────────────────────── */
+function TournamentGroupCard({
   tournament,
-  selectedDirection,
-  onSetDirection,
-  onJoin,
-  isJoining,
-  joinTx,
-  joinError,
   index,
 }: {
-  tournament: OnChainTournament;
-  selectedDirection: PickDirection;
-  onSetDirection: (dir: PickDirection) => void;
-  onJoin: () => void;
-  isJoining: boolean;
-  joinTx?: string;
-  joinError?: string;
+  tournament: TournamentGroup;
   index: number;
 }) {
   const statusStyle = STATUS_STYLE[tournament.status];
   const isLive = tournament.status === "live";
-  const total = tournament.upCount + tournament.downCount;
-  const upPct = total > 0 ? Math.round((tournament.upCount / total) * 100) : 50;
-  const downPct = 100 - upPct;
+  const currentRound = tournament.currentRound;
+  const completedLabel = `${tournament.completedRounds}/${tournament.totalRounds} rounds`;
+
+  const timeInfo = useMemo(() => {
+    if (tournament.status === "live" && currentRound) {
+      return { label: "Ends in", value: formatTimeLeft(currentRound.endTimeMs) };
+    }
+    if (tournament.status === "upcoming" && currentRound) {
+      return { label: "Starts in", value: formatTimeLeft(currentRound.startTimeMs) };
+    }
+    return { label: "Status", value: "Completed" };
+  }, [tournament.status, currentRound]);
 
   return (
     <div
-      className={`glass-panel rounded-2xl flex flex-col gap-0 relative overflow-hidden tournament-card animate-card-enter ${isLive ? "tournament-card-live" : ""}`}
+      className={`glass-panel rounded-2xl flex flex-col relative overflow-hidden tournament-card animate-card-enter ${isLive ? "tournament-card-live" : ""}`}
       style={{
         animationDelay: `${index * 80}ms`,
         borderTop: `2px solid ${statusStyle.border}`,
       }}
     >
+      {/* Ambient glow */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${statusStyle.color}08 0%, transparent 60%)`,
+        }}
+      />
+
       {/* Live pulse strip */}
       {isLive && (
         <div
@@ -140,11 +124,10 @@ function TournamentCard({
         />
       )}
 
-      {/* Card header */}
-      <div className="px-5 pt-5 pb-4">
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4 relative z-10">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            {/* Coin icon placeholder */}
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs shrink-0"
               style={{
@@ -161,12 +144,11 @@ function TournamentCard({
                 <span className="text-slate-500 font-bold"> / USDT</span>
               </h3>
               <p className="text-[10px] text-slate-500 font-bold mt-0.5">
-                S{tournament.seasonId || "-"} · Round #{tournament.roundNumber || "-"}
+                Season {tournament.seasonId} · {tournament.totalRounds} rounds
               </p>
             </div>
           </div>
 
-          {/* Status badge */}
           <div className="flex items-center gap-1.5 shrink-0">
             {isLive && (
               <div
@@ -189,25 +171,18 @@ function TournamentCard({
       </div>
 
       {/* Divider */}
-      <div style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 20px" }} />
+      <div
+        className="relative z-10"
+        style={{ height: "1px", background: "rgba(255,255,255,0.05)", margin: "0 20px" }}
+      />
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-0 px-5 py-4">
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-0 px-5 py-4 relative z-10">
         {[
           { label: "Entry Fee", value: `${formatUSDT(tournament.entryFeeRaw)} USDT` },
-          { label: "Total Pool", value: `${formatUSDT(tournament.totalPoolRaw)} USDT` },
-          { label: "Participants", value: tournament.totalParticipants },
-          {
-            label: tournament.status === "upcoming" ? "Starts in" : tournament.status === "live" ? "Ends in" : "Status",
-            value:
-              tournament.status === "upcoming"
-                ? formatTimeLeft(tournament.startTimeMs)
-                : tournament.status === "live"
-                ? formatTimeLeft(tournament.endTimeMs)
-                : tournament.status === "ended"
-                ? "Ended"
-                : "Cancelled",
-          },
+          { label: "Prize Pool", value: `${formatUSDT(tournament.totalPrizePoolRaw)} USDT` },
+          { label: "Progress", value: completedLabel },
+          timeInfo,
         ].map((item) => (
           <div key={item.label} className="py-1.5">
             <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest">
@@ -218,189 +193,54 @@ function TournamentCard({
         ))}
       </div>
 
-      {/* "Waiting for admin" banner when start time passed but not live */}
-      {tournament.status === "upcoming" && Date.now() >= tournament.startTimeMs && (
-        <div
-          className="mx-5 mb-3 rounded-lg px-3 py-2 text-[10px] font-bold flex items-center gap-2"
-          style={{
-            backgroundColor: "rgba(245,158,11,0.08)",
-            color: "#fcd34d",
-            border: "1px solid rgba(245,158,11,0.2)",
-          }}
-        >
-          <span className="material-symbols-outlined text-sm leading-none">schedule</span>
-          Waiting for admin to start the round on-chain…
-        </div>
-      )}
-
-      {/* Vote distribution bar */}
-      <div className="px-5 pb-4">
-        <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest mb-1.5">
-          <span style={{ color: "#22c55e" }}>UP {upPct}%</span>
-          <span style={{ color: "#ef4444" }}>DOWN {downPct}%</span>
-        </div>
-        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(239,68,68,0.25)" }}>
-          <div
-            className="h-full rounded-full animate-vote-bar"
-            style={{
-              width: `${upPct}%`,
-              background: "linear-gradient(90deg, #16a34a, #22c55e)",
-            }}
-          />
-        </div>
-        <div className="flex items-center justify-between text-[10px] text-slate-500 font-bold mt-1">
-          <span>{tournament.upCount} players</span>
-          <span>{tournament.downCount} players</span>
-        </div>
+      {/* Round progress dots */}
+      <div className="px-5 pb-4 relative z-10">
+        <p className="text-[10px] text-slate-600 font-black uppercase tracking-widest mb-2">
+          Round Progress
+        </p>
+        <RoundDots rounds={tournament.rounds} tournament={tournament} />
+        {currentRound && tournament.status !== "completed" && (
+          <p className="text-[10px] text-slate-500 font-bold mt-1.5">
+            {tournament.status === "live"
+              ? `Round ${currentRound.roundNumber} live now`
+              : `Round ${currentRound.roundNumber} starts ${formatTimeLeft(currentRound.startTimeMs)}`}
+          </p>
+        )}
       </div>
 
-      {/* Direction buttons */}
-      <div className="grid grid-cols-2 gap-2 px-5 pb-4">
-        <button
-          type="button"
-          onClick={() => onSetDirection(DIRECTION.UP)}
-          disabled={!isLive}
-          className="rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition-all"
+      {/* Action */}
+      <div className="px-5 pb-5 relative z-10">
+        <Link
+          href={`/tournaments/${tournament.seasonId}`}
+          className="block w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-90"
           style={
-            selectedDirection === DIRECTION.UP
+            isLive
               ? {
-                  backgroundColor: "rgba(34,197,94,0.22)",
-                  color: "#22c55e",
-                  border: "1.5px solid rgba(34,197,94,0.7)",
-                  boxShadow: "0 0 12px rgba(34,197,94,0.2)",
+                  backgroundColor: "#0df280",
+                  color: "#0a0a0a",
+                  boxShadow: "0 0 20px rgba(13,242,128,0.3)",
+                }
+              : tournament.status === "upcoming"
+              ? {
+                  backgroundColor: "rgba(245,158,11,0.15)",
+                  color: "#f59e0b",
+                  border: "1px solid rgba(245,158,11,0.35)",
                 }
               : {
-                  backgroundColor: "rgba(34,197,94,0.08)",
-                  color: "#22c55e",
-                  border: "1.5px solid rgba(34,197,94,0.25)",
+                  backgroundColor: "rgba(255,255,255,0.05)",
+                  color: "#94a3b8",
+                  border: "1px solid rgba(255,255,255,0.1)",
                 }
           }
         >
-          ▲ UP ({tournament.upCount})
-        </button>
-        <button
-          type="button"
-          onClick={() => onSetDirection(DIRECTION.DOWN)}
-          disabled={!isLive}
-          className="rounded-xl py-2.5 text-xs font-black uppercase tracking-wider transition-all"
-          style={
-            selectedDirection === DIRECTION.DOWN
-              ? {
-                  backgroundColor: "rgba(239,68,68,0.22)",
-                  color: "#ef4444",
-                  border: "1.5px solid rgba(239,68,68,0.7)",
-                  boxShadow: "0 0 12px rgba(239,68,68,0.2)",
-                }
-              : {
-                  backgroundColor: "rgba(239,68,68,0.08)",
-                  color: "#ef4444",
-                  border: "1.5px solid rgba(239,68,68,0.25)",
-                }
-          }
-        >
-          ▼ DOWN ({tournament.downCount})
-        </button>
+          {isLive ? "Predict Now" : tournament.status === "upcoming" ? "View Details" : "View Results"}
+        </Link>
       </div>
-
-      {/* Action buttons */}
-      {tournament.status === "upcoming" ? (
-        <div className="px-5 pb-5 flex flex-col gap-2">
-          <Link
-            href={`/tournaments/${tournament.sessionId}`}
-            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-80"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.06)",
-              color: "#cbd5e1",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
-            View Details
-          </Link>
-          <div
-            className="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5"
-            style={{
-              backgroundColor: "rgba(245,158,11,0.07)",
-              color: "#f59e0b",
-              border: "1px dashed rgba(245,158,11,0.3)",
-            }}
-          >
-            <span className="material-symbols-outlined text-sm leading-none">schedule</span>
-            Waiting for admin to start · {formatTimeLeft(tournament.startTimeMs)} remaining
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2 px-5 pb-5">
-          <Link
-            href={`/tournaments/${tournament.sessionId}`}
-            className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all hover:opacity-80"
-            style={{
-              backgroundColor: "rgba(255,255,255,0.06)",
-              color: "#cbd5e1",
-              border: "1px solid rgba(255,255,255,0.12)",
-            }}
-          >
-            View Details
-          </Link>
-
-          {isLive ? (
-            <button
-              type="button"
-              onClick={onJoin}
-              disabled={isJoining}
-              className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center transition-all"
-              style={{
-                backgroundColor: isJoining ? "rgba(13,242,128,0.4)" : "#0df280",
-                color: "#0a0a0a",
-                opacity: isJoining ? 0.7 : 1,
-                boxShadow: isJoining ? "none" : "0 0 20px rgba(13,242,128,0.3)",
-              }}
-            >
-              {isJoining ? "Joining..." : `Join ${formatUSDT(tournament.entryFeeRaw)} USDT`}
-            </button>
-          ) : tournament.status === "cancelled" ? (
-            <div
-              className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-50 cursor-not-allowed"
-              style={{
-                backgroundColor: "rgba(239,68,68,0.1)",
-                color: "#fca5a5",
-                border: "1px solid rgba(239,68,68,0.25)",
-              }}
-            >
-              Cancelled
-            </div>
-          ) : (
-            <div
-              className="w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest text-center opacity-40 cursor-not-allowed"
-              style={{
-                backgroundColor: "rgba(148,163,184,0.08)",
-                color: "#94a3b8",
-                border: "1px solid rgba(148,163,184,0.2)",
-              }}
-            >
-              Ended
-            </div>
-          )}
-        </div>
-      )}
-
-      {joinError && (
-        <p className="px-5 pb-4 text-[11px] font-bold text-red-400">{joinError}</p>
-      )}
-      {joinTx && (
-        <a
-          href={`${EXPLORER_BASE}/txblock/${joinTx}`}
-          target="_blank"
-          rel="noreferrer"
-          className="px-5 pb-4 text-[11px] font-bold text-sky-300 hover:text-sky-200 block"
-        >
-          Tx: {joinTx.slice(0, 16)}...
-        </a>
-      )}
     </div>
   );
 }
 
-/* ─── Skeleton card ─────────────────────────────────────────────── */
+/* ─── Skeleton card ──────────────────────────────────────────────── */
 function SkeletonCard() {
   return (
     <div className="glass-panel rounded-2xl p-5 space-y-4">
@@ -416,46 +256,65 @@ function SkeletonCard() {
           <div key={i} className="h-10 rounded-xl animate-shimmer" />
         ))}
       </div>
-      <div className="h-8 rounded-xl animate-shimmer" />
-      <div className="grid grid-cols-2 gap-2">
-        <div className="h-10 rounded-xl animate-shimmer" />
-        <div className="h-10 rounded-xl animate-shimmer" />
-      </div>
+      <div className="h-6 rounded-xl animate-shimmer w-2/3" />
+      <div className="h-10 rounded-xl animate-shimmer" />
+    </div>
+  );
+}
+
+/* ─── Stats mini card ───────────────────────────────────────────── */
+function StatCard({
+  label,
+  value,
+  color,
+  delay = 0,
+}: {
+  label: string;
+  value: string | number;
+  color: string;
+  delay?: number;
+}) {
+  return (
+    <div
+      className="glass-panel rounded-2xl p-4 relative overflow-hidden animate-card-enter"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(ellipse 80% 80% at 50% 100%, ${color}14 0%, transparent 70%)`,
+        }}
+      />
+      <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1 relative z-10">
+        {label}
+      </p>
+      <p className="text-xl font-black relative z-10" style={{ color }}>
+        {value}
+      </p>
     </div>
   );
 }
 
 /* ─── Main page ─────────────────────────────────────────────────── */
 export default function TournamentsPage() {
-  const account = useCurrentAccount();
-  const { balance, refetch: refetchBalance } = useUSDTBalance(account?.address);
-  const tournamentsQuery = useOnChainTournaments();
-  const { joinGame } = useJoinGame();
+  const tournamentsQuery = useMultiRoundTournaments();
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
-    () => false
+    () => false,
   );
 
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "live" | "upcoming" | "ended" | "cancelled"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "live" | "upcoming" | "completed">("all");
   const [search, setSearch] = useState("");
-  const [selectedDirectionBySession, setSelectedDirectionBySession] = useState<
-    Record<string, PickDirection>
-  >({});
-  const [joiningSessionId, setJoiningSessionId] = useState<string | null>(null);
-  const [joinTxBySession, setJoinTxBySession] = useState<Record<string, string>>({});
-  const [joinErrorBySession, setJoinErrorBySession] = useState<Record<string, string>>({});
 
   const tournaments = useMemo(() => tournamentsQuery.data ?? [], [tournamentsQuery.data]);
+
   const filteredTournaments = useMemo(() => {
     return tournaments.filter((t) => {
-      const statusMatch =
-        statusFilter === "all" ? t.status !== "cancelled" : t.status === statusFilter;
+      const statusMatch = statusFilter === "all" ? true : t.status === statusFilter;
       const searchMatch =
         t.coinSymbol.toLowerCase().includes(search.toLowerCase()) ||
-        String(t.roundNumber).includes(search);
+        String(t.seasonId).includes(search);
       return statusMatch && searchMatch;
     });
   }, [tournaments, statusFilter, search]);
@@ -463,69 +322,18 @@ export default function TournamentsPage() {
   const stats = useMemo(() => {
     const live = tournaments.filter((t) => t.status === "live").length;
     const upcoming = tournaments.filter((t) => t.status === "upcoming").length;
-    const ended = tournaments.filter((t) => t.status === "ended").length;
-    const cancelled = tournaments.filter((t) => t.status === "cancelled").length;
-    const participants = tournaments.reduce((sum, t) => sum + t.totalParticipants, 0);
-    const totalPoolRaw = tournaments.reduce((sum, t) => sum + t.totalPoolRaw, 0);
-    return { total: tournaments.length, live, upcoming, ended, cancelled, participants, totalPoolRaw };
+    const completed = tournaments.filter((t) => t.status === "completed").length;
+    const totalRounds = tournaments.reduce((s, t) => s + t.totalRounds, 0);
+    const totalPool = tournaments.reduce((s, t) => s + t.totalPrizePoolRaw, 0);
+    return { total: tournaments.length, live, upcoming, completed, totalRounds, totalPool };
   }, [tournaments]);
-
-  function getSelectedDirection(sessionId: string): PickDirection {
-    return selectedDirectionBySession[sessionId] ?? DIRECTION.UP;
-  }
-
-  function setDirection(sessionId: string, direction: PickDirection) {
-    setSelectedDirectionBySession((prev) => ({ ...prev, [sessionId]: direction }));
-  }
-
-  async function handleQuickJoin(tournament: OnChainTournament) {
-    const sessionId = tournament.sessionId;
-    if (!account) {
-      setJoinErrorBySession((prev) => ({ ...prev, [sessionId]: "Connect wallet first." }));
-      return;
-    }
-    if (tournament.status !== "live") {
-      setJoinErrorBySession((prev) => ({ ...prev, [sessionId]: "Tournament is not live yet." }));
-      return;
-    }
-    if (!balance?.largestCoin) {
-      setJoinErrorBySession((prev) => ({ ...prev, [sessionId]: "No USDT coin found. Claim faucet first." }));
-      return;
-    }
-    if (balance.raw < BigInt(tournament.entryFeeRaw)) {
-      setJoinErrorBySession((prev) => ({ ...prev, [sessionId]: "Insufficient USDT balance." }));
-      return;
-    }
-    const direction = getSelectedDirection(sessionId);
-    setJoiningSessionId(sessionId);
-    setJoinErrorBySession((prev) => ({ ...prev, [sessionId]: "" }));
-    try {
-      const result = await joinGame({
-        sessionId,
-        roundId: tournament.roundObjectId,
-        registryId: tournament.registryId,
-        direction,
-        usdtCoinObjectId: balance.largestCoin.coinObjectId,
-        entryFeeRaw: tournament.entryFeeRaw,
-      });
-      setJoinTxBySession((prev) => ({ ...prev, [sessionId]: result.digest ?? "" }));
-      await Promise.all([refetchBalance(), tournamentsQuery.refetch()]);
-    } catch (error) {
-      setJoinErrorBySession((prev) => ({
-        ...prev,
-        [sessionId]: error instanceof Error ? error.message : "Failed to submit join transaction.",
-      }));
-    } finally {
-      setJoiningSessionId(null);
-    }
-  }
 
   return (
     <div
       style={{ backgroundColor: "#0a0a0a" }}
       className="relative z-10 text-slate-100 antialiased min-h-screen overflow-x-hidden"
     >
-      {/* ── Background decorations ── */}
+      {/* Background */}
       <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
         <div className="blue-cyber-grid absolute inset-0 opacity-40" />
         <div
@@ -546,7 +354,7 @@ export default function TournamentsPage() {
 
       <main className="relative z-10 max-w-7xl mx-auto px-6 pt-28 pb-20">
 
-        {/* ── Page hero ── */}
+        {/* Hero */}
         <div className="mb-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
@@ -559,7 +367,7 @@ export default function TournamentsPage() {
                     border: "1px solid rgba(13,242,128,0.25)",
                   }}
                 >
-                  Live On-Chain
+                  Multi-Round Tournaments
                 </div>
                 {stats.live > 0 && (
                   <div className="flex items-center gap-1.5">
@@ -568,7 +376,7 @@ export default function TournamentsPage() {
                       style={{ backgroundColor: "#0df280" }}
                     />
                     <span className="text-xs font-black text-slate-400">
-                      {stats.live} active now
+                      {stats.live} live now
                     </span>
                   </div>
                 )}
@@ -588,7 +396,7 @@ export default function TournamentsPage() {
                 </span>
               </h1>
               <p className="text-slate-500 font-medium mt-2 text-sm">
-                Real-time data loaded from live OneChain objects.
+                Multi-round prediction tournaments with cumulative leaderboards.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -600,7 +408,7 @@ export default function TournamentsPage() {
                   border: "1px solid rgba(255,255,255,0.06)",
                 }}
               >
-                Refreshed: {mounted ? new Date().toLocaleTimeString() : "--:--:--"}
+                {mounted ? new Date().toLocaleTimeString() : "--:--:--"}
               </div>
               <button
                 type="button"
@@ -618,22 +426,16 @@ export default function TournamentsPage() {
           </div>
         </div>
 
-        {/* ── Stats cards ── */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-8">
-          <StatCard label="Total" value={stats.total} color="#0df280" delay={0} />
+        {/* Stats cards */}
+        <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-8">
+          <StatCard label="Tournaments" value={stats.total} color="#0df280" delay={0} />
           <StatCard label="Live" value={stats.live} color="#22c55e" delay={60} />
           <StatCard label="Upcoming" value={stats.upcoming} color="#f59e0b" delay={120} />
-          <StatCard label="Ended" value={stats.ended} color="#94a3b8" delay={180} />
-          <StatCard label="Cancelled" value={stats.cancelled} color="#ef4444" delay={240} />
-          <StatCard
-            label="Pool"
-            value={`${formatUSDT(stats.totalPoolRaw)} USDT`}
-            color="#3b82f6"
-            delay={300}
-          />
+          <StatCard label="Completed" value={stats.completed} color="#94a3b8" delay={180} />
+          <StatCard label="Total Rounds" value={stats.totalRounds} color="#3b82f6" delay={240} />
         </div>
 
-        {/* ── Filters + Search ── */}
+        {/* Filters + search */}
         <div
           className="flex flex-col md:flex-row gap-3 md:items-center justify-between mb-8 p-4 rounded-2xl"
           style={{
@@ -643,14 +445,13 @@ export default function TournamentsPage() {
           }}
         >
           <div className="flex items-center gap-2 flex-wrap">
-            {(["all", "live", "upcoming", "ended", "cancelled"] as const).map((status) => {
+            {(["all", "live", "upcoming", "completed"] as const).map((status) => {
               const isActive = statusFilter === status;
               const activeColor =
                 status === "all" ? "#0df280"
                 : status === "live" ? "#22c55e"
                 : status === "upcoming" ? "#f59e0b"
-                : status === "ended" ? "#94a3b8"
-                : "#ef4444";
+                : "#94a3b8";
               return (
                 <button
                   key={status}
@@ -687,7 +488,7 @@ export default function TournamentsPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search coin or round..."
+              placeholder="Search coin or season..."
               className="w-full md:w-72 pl-9 pr-4 py-2.5 rounded-xl text-sm form-field-glow"
               style={{
                 backgroundColor: "rgba(255,255,255,0.05)",
@@ -699,16 +500,14 @@ export default function TournamentsPage() {
           </div>
         </div>
 
-        {/* ── Loading skeletons ── */}
+        {/* Loading */}
         {tournamentsQuery.isLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {[...Array(6)].map((_, i) => (
-              <SkeletonCard key={i} />
-            ))}
+            {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
           </div>
         )}
 
-        {/* ── Error state ── */}
+        {/* Error */}
         {tournamentsQuery.isError && (
           <div
             className="rounded-2xl p-5 text-sm font-bold"
@@ -724,7 +523,7 @@ export default function TournamentsPage() {
           </div>
         )}
 
-        {/* ── Empty state ── */}
+        {/* Empty state */}
         {!tournamentsQuery.isLoading && !tournamentsQuery.isError && filteredTournaments.length === 0 && (
           <div
             className="glass-panel rounded-2xl p-12 text-center"
@@ -732,7 +531,10 @@ export default function TournamentsPage() {
           >
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-              style={{ backgroundColor: "rgba(13,242,128,0.1)", border: "1px solid rgba(13,242,128,0.2)" }}
+              style={{
+                backgroundColor: "rgba(13,242,128,0.1)",
+                border: "1px solid rgba(13,242,128,0.2)",
+              }}
             >
               <span className="material-symbols-outlined text-3xl" style={{ color: "#0df280" }}>
                 emoji_events
@@ -742,7 +544,7 @@ export default function TournamentsPage() {
             <p className="text-slate-500 text-sm mb-6">
               {search || statusFilter !== "all"
                 ? "Try adjusting your filters."
-                : "No on-chain tournaments exist yet."}
+                : "No multi-round tournaments have been created yet."}
             </p>
             <Link
               href="/arena"
@@ -753,26 +555,16 @@ export default function TournamentsPage() {
                 boxShadow: "0 0 20px rgba(13,242,128,0.3)",
               }}
             >
-              Create First Tournament
+              Create Tournament
             </Link>
           </div>
         )}
 
-        {/* ── Tournament cards grid ── */}
+        {/* Tournament cards grid */}
         {!tournamentsQuery.isLoading && !tournamentsQuery.isError && filteredTournaments.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-            {filteredTournaments.map((tournament, i) => (
-              <TournamentCard
-                key={tournament.sessionId}
-                tournament={tournament}
-                index={i}
-                selectedDirection={getSelectedDirection(tournament.sessionId)}
-                onSetDirection={(dir) => setDirection(tournament.sessionId, dir)}
-                onJoin={() => handleQuickJoin(tournament)}
-                isJoining={joiningSessionId === tournament.sessionId}
-                joinTx={joinTxBySession[tournament.sessionId]}
-                joinError={joinErrorBySession[tournament.sessionId]}
-              />
+            {filteredTournaments.map((t, i) => (
+              <TournamentGroupCard key={t.seasonId} tournament={t} index={i} />
             ))}
           </div>
         )}

@@ -55,18 +55,23 @@ export function buildJoinGameTx(
 
 /**
  * Claim rewards (principal + yield for winners, principal only for losers).
- * Returns a Coin<USDT> transferred to `playerAddress`.
+ * SC signature: claim_rewards(session: &GameSession, round: &mut Round, clock: &Clock, ctx)
+ * Returns a Coin<USDT> transferred to `senderAddress`.
  */
 export function buildClaimRewardTx(
+  sessionId: string,
   roundId: string,
-  registryId: string,
   senderAddress: string,
 ): Transaction {
   const tx = new Transaction();
   tx.setGasBudget(10_000_000);
   const rewardCoin = tx.moveCall({
     target: `${PACKAGE_ID}::game_controller::claim_rewards`,
-    arguments: [tx.object(roundId), tx.object(registryId)],
+    arguments: [
+      tx.object(sessionId),
+      tx.object(roundId),
+      tx.object(OBJECT_IDS.CLOCK),
+    ],
   });
   tx.transferObjects([rewardCoin], tx.pure.address(senderAddress));
   return tx;
@@ -179,6 +184,60 @@ export function buildCancelTournamentTx(params: CancelTournamentParams): Transac
     ],
   });
 
+  return tx;
+}
+
+export interface CompleteGameParams {
+  sessionId: string;
+  roundId: string;
+  registryId: string;
+  leaderboardId: string;
+  priceEndRaw: number;
+  top3Players: string[]; // 0–3 addresses [rank1, rank2, rank3]
+}
+
+/**
+ * Admin-only flow:
+ * Complete a game session — sets winner direction, top-3 ranks, updates leaderboard.
+ * SC signature: complete_game(session, round, registry, leaderboard, price_end, top3_players, clock, ctx)
+ */
+export function buildCompleteGameTx(params: CompleteGameParams): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudget(20_000_000);
+  tx.moveCall({
+    target: `${PACKAGE_ID}::game_controller::complete_game`,
+    arguments: [
+      tx.object(params.sessionId),
+      tx.object(params.roundId),
+      tx.object(params.registryId),
+      tx.object(params.leaderboardId),
+      tx.pure.u64(params.priceEndRaw),
+      tx.pure.vector("address", params.top3Players),
+      tx.object(OBJECT_IDS.CLOCK),
+    ],
+  });
+  return tx;
+}
+
+export interface SettleGameParams {
+  roundId: string;
+}
+
+/**
+ * Admin-only flow:
+ * Settle a completed game — deducts 10% admin fee to Treasury, locks final_prize_pool.
+ * SC signature: settle_game(round, treasury, ctx)
+ */
+export function buildSettleGameTx(params: SettleGameParams): Transaction {
+  const tx = new Transaction();
+  tx.setGasBudget(10_000_000);
+  tx.moveCall({
+    target: `${PACKAGE_ID}::game_controller::settle_game`,
+    arguments: [
+      tx.object(params.roundId),
+      tx.object(OBJECT_IDS.TREASURY),
+    ],
+  });
   return tx;
 }
 
