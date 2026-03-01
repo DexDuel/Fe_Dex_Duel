@@ -29,14 +29,20 @@ pnpm prisma generate
 ```
 
 ### 4. Running the Application
-You need **two** terminal windows open:
+You need **three** terminal windows open:
 
 **Terminal 1: Frontend Development**
 ```bash
-pnpm dev
+pnpm run dev
 ```
 
-**Terminal 2: On-Chain Event Indexer (MANDATORY)**
+**Terminal 2: Prisma Studio (Database GUI)**
+```bash
+pnpm prisma studio
+```
+> Opens a visual database editor at [http://localhost:5555](http://localhost:5555)
+
+**Terminal 3: On-Chain Event Indexer (MANDATORY)**
 ```bash
 pnpm run indexer:dev
 ```
