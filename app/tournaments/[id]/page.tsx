@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -218,7 +218,10 @@ function TournamentLiveLeaderboard({
 }) {
   // Settled / ended round winners (historical price derived)
   const roundWinnersQuery = useTournamentRoundWinners(tournament);
-  const savedWinners = roundWinnersQuery.data ?? new Map<number, 1 | 2>();
+  const savedWinners = useMemo(
+    () => roundWinnersQuery.data ?? new Map<number, 1 | 2>(),
+    [roundWinnersQuery.data]
+  );
 
   // Live price — refreshes every 1 second
   const quoteQuery = useMarketQuote(toFinnhubSymbol(tournament.coinSymbol));
@@ -231,16 +234,14 @@ function TournamentLiveLeaderboard({
     return () => clearInterval(t);
   }, []);
 
-  // Cache last-known live direction so transition live→ended is seamless
-  const liveDirectionCache = useRef(new Map<number, 1 | 2>());
-
   const sortedRounds = useMemo(
     () => [...tournament.rounds].sort((a, b) => a.startTimeMs - b.startTimeMs),
     [tournament.rounds],
   );
 
-  // Merged winner map: confirmed > cached-live > nothing
+  // Merged winner map: confirmed > live > nothing
   const roundWinners = useMemo(() => {
+    // Determine the winners based on currentPriceUsd and savedWinners
     const merged = new Map(savedWinners);
 
     for (const round of tournament.rounds) {
@@ -257,21 +258,14 @@ function TournamentLiveLeaderboard({
       if (isLocallyLive && round.priceStart > 0 && currentPriceUsd !== null) {
         const startUsd = round.priceStart / 1e8;
         const dir: 1 | 2 = currentPriceUsd >= startUsd ? 1 : 2;
-        liveDirectionCache.current.set(round.roundNumber, dir);
         merged.set(round.roundNumber, dir);
       } else if (isLocallyEnded && round.priceStart > 0) {
-        // Round just ended — prefer cached snapshot (frozen direction)
-        const cached = liveDirectionCache.current.get(round.roundNumber);
-        if (cached) {
-          merged.set(round.roundNumber, cached);
-        } else if (currentPriceUsd !== null) {
+        if (currentPriceUsd !== null) {
           // Fallback: use current price only within 3 min of end (Finnhub indexing delay)
-          // Cache it immediately so the result is frozen even as live price moves
           const justEnded = round.endTimeMs > 0 && nowMs - round.endTimeMs < 3 * 60 * 1000;
           if (justEnded) {
             const startUsd = round.priceStart / 1e8;
             const dir: 1 | 2 = currentPriceUsd > startUsd ? 1 : 2;
-            liveDirectionCache.current.set(round.roundNumber, dir); // freeze it
             merged.set(round.roundNumber, dir);
           }
         }
@@ -547,9 +541,6 @@ function RoundHistoryItem({
     retry: 3,
   });
 
-  // Early return after all hooks
-  if (!isDone) return null;
-
   // Prefer on-chain price → DB/Finnhub price → null
   const endPriceUsd: number | null = onChainEndPriceUsd ?? endPriceQuery.data?.priceEnd ?? null;
 
@@ -565,6 +556,9 @@ function RoundHistoryItem({
     if (!endPriceUsd || !startPriceUsd) return 0;
     return endPriceUsd > startPriceUsd ? DIRECTION.UP : DIRECTION.DOWN;
   }, [round.winnerDirection, onChainEndPriceUsd, endPriceQuery.data, endPriceUsd, startPriceUsd]);
+
+  // Early return after all hooks
+  if (!isDone) return null;
 
   const isEstimated = round.winnerDirection === 0 && derivedWinDir !== 0;
 
@@ -1342,8 +1336,8 @@ export default function TournamentDetailPage() {
                   )}
                 </div>
                 <CandlestickChart
-                  candles={candlesQuery.data ?? null}
-                  quote={quoteQuery.data ?? null}
+                  candles={candlesQuery.data ?? undefined}
+                  quote={quoteQuery.data ?? undefined}
                   symbol={tournament.coinSymbol}
                   isLoading={candlesQuery.isLoading}
                 />
@@ -1454,7 +1448,7 @@ export default function TournamentDetailPage() {
                 <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-3">
                   Need USDT?
                 </p>
-                <FaucetButton />
+                <FaucetButton address={account.address} />
               </div>
             )}
           </div>

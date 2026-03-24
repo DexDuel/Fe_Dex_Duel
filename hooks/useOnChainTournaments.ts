@@ -271,10 +271,19 @@ async function fetchOnChainTournaments(client: SuiClient): Promise<OnChainTourna
   if (drafts.length === 0) return [];
 
   const uniqueRoundIds = Array.from(new Set(drafts.map((draft) => draft.roundObjectId)));
-  const roundObjects = await client.multiGetObjects({
-    ids: uniqueRoundIds,
-    options: { showContent: true, showType: true },
-  });
+  
+  // Batch into chunks of 50 to avoid Sui RPC limits
+  const CHUNK_SIZE = 50;
+  const roundObjects = [];
+  
+  for (let i = 0; i < uniqueRoundIds.length; i += CHUNK_SIZE) {
+    const chunk = uniqueRoundIds.slice(i, i + CHUNK_SIZE);
+    const results = await client.multiGetObjects({
+      ids: chunk,
+      options: { showContent: true, showType: true },
+    });
+    roundObjects.push(...results);
+  }
 
   const roundById = new Map<string, ParsedRound>();
   for (const objectResponse of roundObjects) {
@@ -408,4 +417,59 @@ export function usePlayerJoinEvents(address?: string) {
       (event) => event.player.toLowerCase() === normalizedAddress,
     ),
   };
+}
+
+// ─── Player Claims ────────────────────────────────────────────────────────
+
+export interface RewardClaimEvent {
+  txDigest: string;
+  timestampMs: number;
+  /** Object address of the round (0x...) — present if event emits round_address */
+  roundObjectId: string;
+  /** Numeric round ID — present if event emits round_id as a number */
+  roundNumber: number;
+  player: string;
+}
+
+function parseClaimEvent(event: SuiEvent): RewardClaimEvent | null {
+  if (event.type !== `${PACKAGE_ID}::game_round::RewardClaimed`) return null;
+  const parsed = event.parsedJson;
+  if (!isRecord(parsed)) return null;
+
+  const playerRaw = String(parsed.player);
+  const player = playerRaw.startsWith("0x") ? playerRaw : `0x${playerRaw}`;
+
+  const roundAddress = typeof parsed.round_address === "string" ? parsed.round_address : "";
+  const roundNumber = toNumber(parsed.round_id ?? parsed.round_number ?? 0);
+
+  return {
+    txDigest: event.id.txDigest,
+    timestampMs: Number(event.timestampMs ?? Date.now()),
+    roundObjectId: roundAddress,
+    roundNumber,
+    player,
+  };
+}
+
+export function usePlayerClaimEvents(address?: string) {
+  const client = useSuiClient();
+  const normalizedAddress = address?.toLowerCase() ?? "";
+
+  return useQuery({
+    queryKey: ["player-claim-events", PACKAGE_ID, normalizedAddress],
+    queryFn: async () => {
+      if (!normalizedAddress) return [];
+      const page = await client.queryEvents({
+        query: { MoveEventType: `${PACKAGE_ID}::game_round::RewardClaimed` },
+        limit: 50,
+        order: "descending",
+      });
+
+      return page.data
+        .map(parseClaimEvent)
+        .filter((event): event is RewardClaimEvent => event !== null && event.player.toLowerCase() === normalizedAddress);
+    },
+    enabled: !!normalizedAddress,
+    refetchInterval: 10_000,
+  });
 }

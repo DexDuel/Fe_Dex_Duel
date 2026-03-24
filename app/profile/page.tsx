@@ -7,6 +7,7 @@ import { useLeaderboardRows } from "@/hooks/useLeaderboard";
 import {
   useOnChainTournaments,
   usePlayerJoinEvents,
+  usePlayerClaimEvents,
   type OnChainTournament,
   type JoinGameEvent,
 } from "@/hooks/useOnChainTournaments";
@@ -108,12 +109,14 @@ function TournamentGroupCard({
   group,
   playerRounds,
   claimStates,
+  claimedRoundIds,
   onClaim,
   mounted,
 }: {
   group: TournamentGroup;
   playerRounds: EnrichedEvent[];
   claimStates: ClaimStates;
+  claimedRoundIds: Set<string>;
   onClaim: (sessionId: string, roundObjectId: string) => void;
   mounted: boolean;
 }) {
@@ -123,9 +126,11 @@ function TournamentGroupCard({
     const t = r.tournament;
     if (!t) return false;
     const cs = claimStates[t.sessionId];
+    const isAlreadyClaimed = claimedRoundIds.has(t.roundObjectId.toLowerCase()) || claimedRoundIds.has(String(t.roundNumber));
     return (
       t.status === "ended" &&
       t.isSettled &&
+      !isAlreadyClaimed &&
       (!cs || cs.status === "error")
     );
   });
@@ -229,12 +234,15 @@ function TournamentGroupCard({
           const t = event.tournament;
           const isUp = event.direction === DIRECTION.UP;
           const cs = t ? claimStates[t.sessionId] : undefined;
+          const isAlreadyClaimed = t ? (claimedRoundIds.has(t.roundObjectId.toLowerCase()) || claimedRoundIds.has(String(t.roundNumber))) : false;
+          
           const isClaimable =
             t &&
             t.status === "ended" &&
             t.isSettled &&
+            !isAlreadyClaimed &&
             (!cs || cs.status === "error");
-          const isDone = cs?.status === "done";
+          const isDone = cs?.status === "done" || isAlreadyClaimed;
           const isPending = cs?.status === "pending";
 
           return (
@@ -375,6 +383,7 @@ export default function ProfilePage() {
   const { balance, refetch: refetchBalance } = useUSDTBalance(account?.address);
   const leaderboardQuery = useLeaderboardRows();
   const joinedEventsQuery = usePlayerJoinEvents(account?.address);
+  const claimedEventsQuery = usePlayerClaimEvents(account?.address);
   const tournamentsQuery = useOnChainTournaments();
   const groupsQuery = useMultiRoundTournaments();
   const { claimReward } = useClaimReward();
@@ -382,6 +391,17 @@ export default function ProfilePage() {
   const [claimStates, setClaimStates] = useState<ClaimStates>({});
 
   /* ── derived data ── */
+  // Build a Set containing both object-address and numeric-string identifiers
+  // because the on-chain RewardClaimed event may emit either round_address (0x...)
+  // or round_id (number) depending on the contract version.
+  const claimedRoundIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const e of claimedEventsQuery.data ?? []) {
+      if (e.roundObjectId) ids.add(e.roundObjectId.toLowerCase());
+      if (e.roundNumber) ids.add(String(e.roundNumber));
+    }
+    return ids;
+  }, [claimedEventsQuery.data]);
   const leaderboardRows = useMemo(() => leaderboardQuery.data ?? [], [leaderboardQuery.data]);
   const joinedEvents = useMemo(
     () => [...(joinedEventsQuery.data ?? [])].sort((a, b) => b.timestampMs - a.timestampMs),
@@ -470,9 +490,11 @@ export default function ProfilePage() {
     let count = 0;
     for (const t of tournaments) {
       const cs = claimStates[t.sessionId];
+      const isAlreadyClaimed = claimedRoundIds.has(t.roundObjectId.toLowerCase()) || claimedRoundIds.has(String(t.roundNumber));
       if (
         t.status === "ended" &&
         t.isSettled &&
+        !isAlreadyClaimed &&
         joinedEvents.some((e) => e.roundNumber === t.roundNumber) &&
         (!cs || cs.status === "error")
       ) {
@@ -480,7 +502,7 @@ export default function ProfilePage() {
       }
     }
     return count;
-  }, [tournaments, joinedEvents, claimStates]);
+  }, [tournaments, joinedEvents, claimStates, claimedRoundIds]);
 
   const initial = account?.address ? account.address.slice(2, 4).toUpperCase() : "?";
 
@@ -494,6 +516,7 @@ export default function ProfilePage() {
         [sessionId]: { status: "done", digest: result.digest ?? "" },
       }));
       refetchBalance();
+      claimedEventsQuery.refetch();
     } catch (err) {
       setClaimStates((prev) => ({
         ...prev,
@@ -889,6 +912,7 @@ export default function ProfilePage() {
                       group={group}
                       playerRounds={playerRounds}
                       claimStates={claimStates}
+                      claimedRoundIds={claimedRoundIds}
                       onClaim={handleClaim}
                       mounted={mounted}
                     />
